@@ -1,5 +1,0 @@
-package: api
-output: branch.gen.go
-generate:
-  chi-server: true
-  strict-server: true

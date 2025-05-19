@@ -26,33 +26,96 @@ components:
         token:
           type: string
           description: JWT token
-    User:
-      type: object
-      required:
-        - id
-        - username
-      properties:
-        id:
-          type: string
-          format: uuid
-        username:
-          type: string
     LoginRequest:
       type: object
       required:
-        - username
+        - email
         - password
       properties:
-        username:
+        email:
           type: string
         password:
           type: string
-
+    LoginResponse:
+      type: object
+      required:
+        - token
+        - refresh_token
+      properties:
+        token:
+          type: string
+          description: JWT token
+        refresh_token:
+          type: string
+          description: Refresh token
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+    RegisterResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: Registration successful. Please check your email to verify your account.
+    ConfirmEmailRequest:
+      type: object
+      required:
+        - email
+        - code
+      properties:
+        email:
+          type: string
+        code:
+          type: string
+    
 paths:
+  /api/auth/register:
+    post:
+      summary: Register a new user
+      operationId: register
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: 
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registration successful.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          description: Invalid request or user already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/auth/login:
     post:
       summary: Login to get a JWT token
       operationId: login
+      tags:
+        - Authentication
       requestBody:
         required: true
         content:
@@ -65,7 +128,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Token'
+                $ref: '#/components/schemas/LoginResponse'
         '400':
           description: Invalid request
           content:
@@ -78,23 +141,109 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
-  /api/users/me:
-    get:
-      summary: Get current user information
-      operationId: getCurrentUser
+  /api/auth/confirm-email:
+    post:
+      summary: Confirm user email address
+      operationId: confirmEmail
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmEmailRequest'
+      responses:
+        '200':
+          description: Email confirmed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User for the provided email/code not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/logout:
+    post:
+      summary: Log out current user
+      operationId: logout
+      tags:
+        - Authentication
       security:
         - BearerAuth: []
       responses:
         '200':
-          description: User information
+          description: Logout successful
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Successfully logged out
         '401':
-          description: Unauthorized
+          description: Unauthorized. Invalid or missing authentication token.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error' 
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error during logout process.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/validate-token:
+    get: 
+      tags:
+        - Authentication
+      summary: Validate current authentication token
+      operationId: validateToken
+      security:
+        - BearerAuth: [] 
+      responses:
+        '200':
+          description: Token is valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Token is valid."
+        '401': 
+          description: Unauthorized. Invalid, expired, or missing authentication token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      
+        
+      
+

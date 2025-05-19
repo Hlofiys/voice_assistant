@@ -10,7 +10,7 @@ INSERT INTO users (
     $1,$2,$3,$4,$5,$6
 );
 
--- name: verifyRefreshToken :one
+-- name: VerifyRefreshToken :one
 SELECT EXISTS (
     SELECT 1
     FROM users
@@ -22,17 +22,17 @@ SELECT EXISTS (
       AND $3 <= expired_at + INTERVAL '1 month'      
 );
 
--- name: updateRefreshToken :exec
+-- name: UpdateRefreshToken :exec
 UPDATE users
 SET refresh_token = $1
 WHERE user_id = $2;
 
--- name: logoutById :exec
+-- name: LogoutById :exec
 UPDATE users
 SET refresh_token = NULL AND expired_at = NULL
 WHERE user_id = $1;
 
--- name: updateCodeById :exec
+-- name: UpdateCodeById :exec
 UPDATE users
 SET code = NULL
 WHERE email = $1 AND code = $2;

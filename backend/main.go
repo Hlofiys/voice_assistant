@@ -1,18 +1,23 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"voice_assistant/api"
+	dbCon "voice_assistant/db/sqlc"
 	"voice_assistant/tools"
 	"voice_assistant/util"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/jackc/pgx/v5"
 	middleWare "github.com/oapi-codegen/nethttp-middleware"
 )
+
+var db *dbCon.Queries
 
 func main() {
 	config, err := util.LoadConfig(".")
@@ -37,6 +42,21 @@ func main() {
 
 	fmt.Println("API schema loaded and validated successfully...")
 
+	conn, err := pgx.Connect(context.Background(), config.DbSource)
+	if err != nil {
+		log.Fatalf("Could not connect to database: %v", err)
+	}
+	defer func(conn *pgx.Conn, ctx context.Context) {
+		err := conn.Close(ctx)
+		if err != nil {
+			fmt.Println("Error closing connection...")
+		}
+	}(conn, context.Background())
+
+	db = dbCon.New(conn)
+
+	fmt.Println("PostgreSql connected successfully...")
+
 	// Create JWT authenticator
 	authenticator, err := tools.NewJwsAuthenticator(config)
 	if err != nil {
@@ -50,7 +70,7 @@ func main() {
 	validatorOptions := &middleWare.Options{}
 	validatorOptions.Options.AuthenticationFunc = tools.NewAuthenticator(authenticator)
 
-	server := api.NewServer(*authenticator)
+	server := api.NewServer(*authenticator, db)
 
 	validator := middleWare.OapiRequestValidatorWithOptions(doc, validatorOptions)
 

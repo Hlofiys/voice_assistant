@@ -1,16 +1,12 @@
-import { Image } from "expo-image";
-import { Platform, StyleSheet, TouchableOpacity, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import LottieView from "lottie-react-native";
 import Greeting from "@/assets/json/anim/greeting/Greeting.json";
 
-import { HelloWave } from "@/components/HelloWave";
-import ParallaxScrollView from "@/components/ParallaxScrollView";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import { Tabs, useRouter } from "expo-router";
-import { IconSymbol } from "@/components/ui/IconSymbol";
-import Button from "@/components/buttons/Button";
-import ControlPanel from '@/components/ControlPanel';
+import { useRouter } from "expo-router";
+import Button from "@/components/ui/buttons/Button";
+import ControlPanel from "@/components/ControlPanel";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -69,12 +65,14 @@ const styles = StyleSheet.create({
   },
   textView: {
     backgroundColor: "transparent",
-    display: "flex",
+    paddingHorizontal: 24,
     alignItems: "center",
+    paddingVertical: 16,
     gap: 15,
   },
   regularText: {
+    fontSize: 15,
+    color: "#444", // или используйте тему
     textAlign: "center",
-    fontSize: 16,
-  }
+  },
 });

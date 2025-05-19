@@ -17,36 +17,42 @@ type TThemedInputProps = TextInputProps & {
   isShowForgotPassword?: boolean;
   error?: string;
   touched?: boolean;
+  isPassword?: boolean;
 };
 const ThemedInput: FC<TThemedInputProps> = (props) => {
-  const { label, error, touched, isShowForgotPassword, ...inputProps } = props;
+  const {
+    label,
+    error,
+    touched,
+    isShowForgotPassword,
+    isPassword,
+    ...inputProps
+  } = props;
+
+  const showError = useMemo(() => touched && !!error, [touched, error]);
+  const [isSecurity, setIsSecurity] = useState<boolean>(isPassword || false);
 
   const router = useRouter();
 
-  const [isSecurity, setIsSecurity] = useState<boolean>(
-    inputProps.secureTextEntry || false
-  );
-
-  const showError = useMemo(() => touched && !!error, [touched, error]);
-
   return (
-    <View style={styles.themedInputContainer}>
+    <View
+      style={styles.themedInputContainer}
+      key={isSecurity ? "password" : "text"}
+    >
       <View style={styles.labelContainer}>
         {label && <ThemedText>{label}</ThemedText>}
-        {
-          isShowForgotPassword && (
-            <ThemedText
-              type="link"
-              onPress={() => router.push("/forgotPassword")}
-            >
-              Забыл пароль
-            </ThemedText>
-          ) // переключение на /forgotPassword
-        }
+        {isShowForgotPassword && (
+          <ThemedText
+            type="link"
+            onPress={() => router.push("/forgotPassword")}
+          >
+            Забыл пароль
+          </ThemedText>
+        )}
       </View>
 
       <View style={styles.positionRelativeIcon}>
-        {inputProps.textContentType === "password" && (
+        {isPassword && (
           <TouchableOpacity
             style={styles.eyeSlash}
             onPress={() => setIsSecurity((pre) => !pre)} // баг смены типа с пароля на простой текст
@@ -61,10 +67,11 @@ const ThemedInput: FC<TThemedInputProps> = (props) => {
           </TouchableOpacity>
         )}
         <TextInput
+          key={isSecurity ? "secure" : "visible"}
           style={styles.input}
           placeholderTextColor={"#BABABA"}
           scrollEnabled={false}
-          secureTextEntry={inputProps.secureTextEntry ? isSecurity : undefined}
+          secureTextEntry={isSecurity}
           {...inputProps}
         />
       </View>
@@ -75,7 +82,6 @@ const ThemedInput: FC<TThemedInputProps> = (props) => {
             size={14}
             weight="medium"
             color={"#EA2A2A"}
-            // style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}
           />
           <ThemedText type="link" style={styles.errorMessage}>
             {error}

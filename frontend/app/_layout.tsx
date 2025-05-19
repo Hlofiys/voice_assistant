@@ -17,7 +17,6 @@ export default function RootLayout() {
   });
 
   if (!loaded) {
-    // Async font loading only occurs in development.
     return null;
   }
 
@@ -25,14 +24,11 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack
         screenOptions={{
-          animation: "fade", // или 'fade', 'none', 'default'
-          gestureEnabled: false,
+          headerShown: false,
+          gestureEnabled: true,
+          gestureDirection: "horizontal",
         }}
-      >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
+      />
     </ThemeProvider>
   );
 }

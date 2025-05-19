@@ -1,9 +1,11 @@
-import React, { FC, useState } from "react";
+import { FC, useState } from "react";
 import {
   View,
   TouchableOpacity,
   StyleSheet,
   GestureResponderEvent,
+  StyleProp,
+  ViewStyle,
 } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { IconSymbol } from "@/components/ui/IconSymbol"; // если есть иконки
@@ -13,6 +15,10 @@ type CheckboxProps = {
   checked?: boolean;
   onChange?: (checked: boolean) => void;
   disabled?: boolean;
+  readOnly?: boolean; // новый проп
+  styleBlocks?: {
+    container?: StyleProp<ViewStyle>;
+  };
 };
 
 const Checkbox: FC<CheckboxProps> = ({
@@ -20,13 +26,14 @@ const Checkbox: FC<CheckboxProps> = ({
   checked: controlledChecked,
   onChange,
   disabled,
+  readOnly, // новый проп
+  styleBlocks,
 }) => {
-  // Если передан controlled checked - используем его, иначе локальный стейт
   const [internalChecked, setInternalChecked] = useState(false);
   const checked = controlledChecked ?? internalChecked;
 
   const toggleCheckbox = (event: GestureResponderEvent) => {
-    if (disabled) return;
+    if (disabled || readOnly) return; // запрет переключения если readOnly
     const newChecked = !checked;
     if (onChange) onChange(newChecked);
     if (controlledChecked === undefined) setInternalChecked(newChecked);
@@ -36,8 +43,8 @@ const Checkbox: FC<CheckboxProps> = ({
     <TouchableOpacity
       activeOpacity={0.7}
       onPress={toggleCheckbox}
-      style={styles.container}
-      disabled={disabled}
+      style={[styles.container, styleBlocks?.container]}
+      disabled={disabled} // если disabled — TouchableOpacity заблокирован, если только readOnly — не заблокирован
     >
       <View
         style={[
@@ -55,7 +62,7 @@ const Checkbox: FC<CheckboxProps> = ({
           />
         )}
       </View>
-      {label && <ThemedText style={styles.label}>{label}</ThemedText>}
+      {!!label && <ThemedText style={styles.label}>{label}</ThemedText>}
     </TouchableOpacity>
   );
 };
@@ -64,7 +71,7 @@ export default Checkbox;
 
 const styles = StyleSheet.create({
   container: {
-    width: '90%',
+    width: "90%",
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -88,5 +95,6 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
+    lineHeight: 0,
   },
 });

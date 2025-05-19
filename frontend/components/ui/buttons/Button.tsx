@@ -8,7 +8,7 @@ import {
   TextStyle,
   StyleProp,
 } from "react-native";
-import { ThemedText } from "../ThemedText";
+import { ThemedText } from "../../ThemedText";
 
 export type TButtonType = "primary" | "text";
 interface ButtonProps {

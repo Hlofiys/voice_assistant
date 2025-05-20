@@ -3,11 +3,9 @@ INSERT INTO users (
     user_id,
     email,
     password,
-    code,
-    refresh_token,
-    expired_at
+    code
 )VALUES(
-    $1,$2,$3,$4,$5,$6
+    $1,$2,$3,$4
 );
 
 -- name: VerifyRefreshToken :one
@@ -29,11 +27,11 @@ WHERE user_id = $2;
 
 -- name: LogoutById :exec
 UPDATE users
-SET refresh_token = NULL AND expired_at = NULL
+SET refresh_token = NULL, expired_at = NULL
 WHERE user_id = $1;
 
--- name: UpdateCodeById :exec
+-- name: UpdateCodeById :one
 UPDATE users
-SET code = NULL
-WHERE email = $1 AND code = $2;
-
+SET code = NULL, refresh_token = $3, expired_at = $4
+WHERE email = $1 AND code = $2
+RETURNING user_id;

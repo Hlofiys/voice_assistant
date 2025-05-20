@@ -16,21 +16,17 @@ INSERT INTO users (
     user_id,
     email,
     password,
-    code,
-    refresh_token,
-    expired_at
+    code
 )VALUES(
-    $1,$2,$3,$4,$5,$6
+    $1,$2,$3,$4
 )
 `
 
 type CreateUserParams struct {
-	UserID       pgtype.UUID      `json:"user_id"`
-	Email        string           `json:"email"`
-	Password     string           `json:"password"`
-	Code         pgtype.Text      `json:"code"`
-	RefreshToken pgtype.Text      `json:"refresh_token"`
-	ExpiredAt    pgtype.Timestamp `json:"expired_at"`
+	UserID   pgtype.UUID `json:"user_id"`
+	Email    string      `json:"email"`
+	Password string      `json:"password"`
+	Code     pgtype.Text `json:"code"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
@@ -39,15 +35,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.Email,
 		arg.Password,
 		arg.Code,
-		arg.RefreshToken,
-		arg.ExpiredAt,
 	)
 	return err
 }
 
 const logoutById = `-- name: LogoutById :exec
 UPDATE users
-SET refresh_token = NULL AND expired_at = NULL
+SET refresh_token = NULL, expired_at = NULL
 WHERE user_id = $1
 `
 
@@ -56,20 +50,30 @@ func (q *Queries) LogoutById(ctx context.Context, userID pgtype.UUID) error {
 	return err
 }
 
-const updateCodeById = `-- name: UpdateCodeById :exec
+const updateCodeById = `-- name: UpdateCodeById :one
 UPDATE users
-SET code = NULL
+SET code = NULL, refresh_token = $3, expired_at = $4
 WHERE email = $1 AND code = $2
+RETURNING user_id
 `
 
 type UpdateCodeByIdParams struct {
-	Email string      `json:"email"`
-	Code  pgtype.Text `json:"code"`
+	Email        string           `json:"email"`
+	Code         pgtype.Text      `json:"code"`
+	RefreshToken pgtype.Text      `json:"refresh_token"`
+	ExpiredAt    pgtype.Timestamp `json:"expired_at"`
 }
 
-func (q *Queries) UpdateCodeById(ctx context.Context, arg UpdateCodeByIdParams) error {
-	_, err := q.db.Exec(ctx, updateCodeById, arg.Email, arg.Code)
-	return err
+func (q *Queries) UpdateCodeById(ctx context.Context, arg UpdateCodeByIdParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, updateCodeById,
+		arg.Email,
+		arg.Code,
+		arg.RefreshToken,
+		arg.ExpiredAt,
+	)
+	var user_id pgtype.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
 }
 
 const updateRefreshToken = `-- name: UpdateRefreshToken :exec

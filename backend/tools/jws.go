@@ -3,13 +3,13 @@ package tools
 import (
 	"fmt"
 	"time"
+	"io"
+	"crypto/rand"
+	"encoding/base64"
 	"voice_assistant/util"
 
 	"github.com/golang-jwt/jwt/v5"
-)
-
-const (
-	PermissionsClaim = "perms"
+	"github.com/google/uuid"
 )
 
 type Authenticator struct {
@@ -25,16 +25,16 @@ func NewJwsAuthenticator(config util.Config) (*Authenticator, error) {
 }
 
 // GenerateToken creates a new JWT token with the given permissions and duration
-func (f *Authenticator) GenerateToken(userID string, permissions []string, duration time.Duration) (string, error) {
+func (f *Authenticator) GenerateToken(userID uuid.UUID) (string, error) {
 	now := time.Now()
+	tokenDuration := time.Hour * 24 * 30
 	claims := jwt.MapClaims{
 		"sub":   userID,
-		"exp":   now.Add(duration).Unix(),
+		"exp":   now.Add(tokenDuration).Unix(),
 		"iat":   now.Unix(),
 		"nbf":   now.Unix(),
 		"iss":   f.Config.JwtIssuer,
 		"aud":   f.Config.JwtAudience,
-		"perms": permissions,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -44,6 +44,27 @@ func (f *Authenticator) GenerateToken(userID string, permissions []string, durat
 	}
 
 	return tokenString, nil
+}
+
+func generateSecureRandomString(numBytes int) (string, error) {
+	b := make([]byte, numBytes)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		return "", fmt.Errorf("failed to read random bytes: %w", err)
+	}
+	return base64.URLEncoding.EncodeToString(b), nil
+}
+
+func (f *Authenticator) GenerateRefreshToken() (string, time.Time, error) {
+	numBytes := 60
+	refreshToken, err := generateSecureRandomString(numBytes)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("failed to generate secure random string for refresh token: %w", err)
+	}
+
+	now := time.Now()
+	expiresAt := now.AddDate(0, 1, 0) 
+
+	return refreshToken, expiresAt, nil
 }
 
 // ValidateJWS ensures that the critical JWT claims needed to ensure that we

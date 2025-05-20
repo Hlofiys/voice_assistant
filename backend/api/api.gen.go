@@ -17,12 +17,17 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 const (
 	BearerAuthScopes = "BearerAuth.Scopes"
 )
+
+// ConfirmEmailRequest defines model for ConfirmEmailRequest.
+type ConfirmEmailRequest struct {
+	Code  string `json:"code"`
+	Email string `json:"email"`
+}
 
 // Error defines model for Error.
 type Error struct {
@@ -31,8 +36,28 @@ type Error struct {
 
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
+	Email    string `json:"email"`
 	Password string `json:"password"`
-	Username string `json:"username"`
+}
+
+// LoginResponse defines model for LoginResponse.
+type LoginResponse struct {
+	// RefreshToken Refresh token
+	RefreshToken string `json:"refresh_token"`
+
+	// Token JWT token
+	Token string `json:"token"`
+}
+
+// RegisterRequest defines model for RegisterRequest.
+type RegisterRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// RegisterResponse defines model for RegisterResponse.
+type RegisterResponse struct {
+	Message string `json:"message"`
 }
 
 // Token defines model for Token.
@@ -41,23 +66,32 @@ type Token struct {
 	Token string `json:"token"`
 }
 
-// User defines model for User.
-type User struct {
-	Id       openapi_types.UUID `json:"id"`
-	Username string             `json:"username"`
-}
+// ConfirmEmailJSONRequestBody defines body for ConfirmEmail for application/json ContentType.
+type ConfirmEmailJSONRequestBody = ConfirmEmailRequest
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
+// RegisterJSONRequestBody defines body for Register for application/json ContentType.
+type RegisterJSONRequestBody = RegisterRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Confirm user email address
+	// (POST /api/auth/confirm-email)
+	ConfirmEmail(w http.ResponseWriter, r *http.Request)
 	// Login to get a JWT token
 	// (POST /api/auth/login)
 	Login(w http.ResponseWriter, r *http.Request)
-	// Get current user information
-	// (GET /api/users/me)
-	GetCurrentUser(w http.ResponseWriter, r *http.Request)
+	// Log out current user
+	// (POST /api/auth/logout)
+	Logout(w http.ResponseWriter, r *http.Request)
+	// Register a new user
+	// (POST /api/auth/register)
+	Register(w http.ResponseWriter, r *http.Request)
+	// Validate current authentication token
+	// (GET /api/auth/validate-token)
+	ValidateToken(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -68,6 +102,20 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ConfirmEmail operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmEmail(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // Login operation middleware
 func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request) {
@@ -83,8 +131,8 @@ func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
-// GetCurrentUser operation middleware
-func (siw *ServerInterfaceWrapper) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+// Logout operation middleware
+func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
@@ -93,7 +141,41 @@ func (siw *ServerInterfaceWrapper) GetCurrentUser(w http.ResponseWriter, r *http
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetCurrentUser(w, r)
+		siw.Handler.Logout(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// Register operation middleware
+func (siw *ServerInterfaceWrapper) Register(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.Register(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ValidateToken operation middleware
+func (siw *ServerInterfaceWrapper) ValidateToken(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ValidateToken(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -223,8 +305,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc("POST "+options.BaseURL+"/api/auth/confirm-email", wrapper.ConfirmEmail)
 	m.HandleFunc("POST "+options.BaseURL+"/api/auth/login", wrapper.Login)
-	m.HandleFunc("GET "+options.BaseURL+"/api/users/me", wrapper.GetCurrentUser)
+	m.HandleFunc("POST "+options.BaseURL+"/api/auth/logout", wrapper.Logout)
+	m.HandleFunc("POST "+options.BaseURL+"/api/auth/register", wrapper.Register)
+	m.HandleFunc("GET "+options.BaseURL+"/api/auth/validate-token", wrapper.ValidateToken)
 
 	return m
 }
@@ -232,16 +317,22 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/7xUQW/bPAz9KwK/72jU6baTb+mwFSl2KLZ2PRQ9qDKTqLUllaQyZIX/+yBpSRbYwDag",
-	"602mn/meHvn8DMb3wTt0wtA8A5s19jofPxB5SodAPiCJxVzukVmvMB1lGxAaYCHrVjAMFRA+RUvYQnO7",
-	"B95VO6C/f0AjMFTwya+s+4xPEVnGFEEzf/PUTnBUEBnJ6f4PBOyR1aHjlJgr/4hurEJ25RbZkA1ivYMG",
-	"Lm6uVHlV/Ya/oKYYrxknnLX5wktPvRZoIEbbjjn+xoD8/R4+FjJUwGgiWdl+SXMvMs5QE9I8yjo93een",
-	"jztRFzdXUJUtSZ3K24PKtUiAITW2bunH5s0vF2rpSW28Nag0s2XRTtS9No/o8nWtdKnT14yY7xHzywVU",
-	"sEHi0un0ZHYyS3b4gE4HCw28zaU0bFnnm9Q62FpHWddd2rfsuC8Ll3zXSdSihaasIxTzkOXMt9sEMt4J",
-	"uozXIXTW5C/qB/bukJV0+p9wCQ38Vx/CVP9MUn206sPxiIQi5gIH77jY/2Y2ezHustmZ9HgOWZTiaAwy",
-	"L2OXjHz3gsTl3zFBvHAb3dlW0c6QxHv6eryGsEUnVndc9j/2vabt3hLxaoWitDrEPMHyJqUkcV2Ct8KJ",
-	"NTpHeR+J0EkO+D8cbO4/cc1UVyl6Ka6p9Fr+XruUM0/2O7ZHPxZobo9/Kbd3w92vvp+jKFNcU3EkfxiG",
-	"HwEAAP///ygAA6MGAAA=",
+	"H4sIAAAAAAAC/8xXTXMbNwz9Kxi2x41kt+lFN6eTzrjTg8dx0oPH06FJaMV4l9yAWMVqRv+9A1IfXmvX",
+	"URrLykkSCQLgw8MD9UWZUDfBo+eoJl9UNDOsdfr6e/BTR/XbWrvqEj+1GFmWGwoNEjtMRiZYlE9eNKgm",
+	"KjI5X6ploVCO9ewsC0X4qXWEVk2uV2ZF9nNTrK3D7Uc0LH7eEgXajVtjjLrErwdYG/b5/iuUzg9ebegG",
+	"hWp0jJ8D2f2vtznxRBqxCT7ibh6EU8I4+4fDHXpZsBgNuYZd8GqiLvM25O1iN9uBc3/+fTV05tEl1lbd",
+	"RPpucomli4x0fEy3mQzB+oBBeK/rpsIEphwjLRhBbI3BGKdtNYKLCnVEMDM0d7AILUFKAzjAHMlNF3lR",
+	"GxNaz6OvYvoULa/WBesm/Ex13I24LFRE05LjxTtp/xzuDWpCOmt5Jr9u068/AtWac1BVZLEQT3l3m8CM",
+	"uVFLcez8NOzmfHZxDtNAMA/OIOgYXWTtGW61uUNvxZHjVJAPyeJsY3F2ca4KNUeK2dPp6GR0IqCFBr1u",
+	"nJqoX9OS8INn6SZj3bixbnk2NlnSXm1o2ITMUsE5Ff3cqklH+VTGECO/CXaRJc8z+nRMN03lTDo4/hiD",
+	"3yqofPuZcKom6qfxVmLHK30d94nrslswphbTQmZwusovJyfPlkKmWQrarU5KClZYoX3QB9VCoH79jElk",
+	"ee9J4tzPdeUs0Bocifv68HHfR6TETZ4hNBTmzqLNzT6WIQU+MExD662k9NvLQMFIXlcQkeZIgCvDQsW2",
+	"rjUttpSFVtLP0qStJYxRmkmXUQRAmhk9r9JTN+Ji2xyVjKHhpkhT6kDd0BnEL9wG3enbA38yeNAEx22B",
+	"05eLawit0EVX8Yfiei4IByiRQUNnAO7L9NDyk1SX/e8k3R7PjXcPlBWqUJZoIUfeneSPh3YfT0PLO0R9",
+	"AcK89wJrIPcv2hGs6RMIahej8yXoTjlytUbH5RTYVqCFzAVRekFt1HkNqcl19x10fbO8ecREqReYlgg9",
+	"J/Xdm4W0eqIO83D9iD2Q6j5+re8lvKcHCD+svUPv8WNpsJA6jVhdEWq7ALx3kX8seVzjCho8fv42TqbL",
+	"asZXmz8bJfYQ88PK7Grzz/CwOpnigIuQ8hv9P3187OSo6lgA3jfSZ8UeOvktkrQuzUaT+nw+yYfl8r8A",
+	"AAD//x+EEqMVEgAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

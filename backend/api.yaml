@@ -76,7 +76,19 @@ components:
           type: string
         code:
           type: string
-    
+    ConfirmEmailResponse:
+      type: object
+      required:
+        - token
+        - refresh_token
+      properties:
+        token:
+          type: string
+          description: JWT token
+        refresh_token:
+          type: string
+          description: Refresh token
+      
 paths:
   /api/auth/register:
     post:
@@ -166,7 +178,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Token'
+                $ref: '#/components/schemas/ConfirmEmailResponse'
         '400':
           description: Invalid request
           content:

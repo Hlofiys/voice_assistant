@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 const (
@@ -75,6 +76,11 @@ type Token struct {
 	Token string `json:"token"`
 }
 
+// ChatMultipartBody defines parameters for Chat.
+type ChatMultipartBody struct {
+	Audio *openapi_types.File `json:"audio,omitempty"`
+}
+
 // ConfirmEmailJSONRequestBody defines body for ConfirmEmail for application/json ContentType.
 type ConfirmEmailJSONRequestBody = ConfirmEmailRequest
 
@@ -83,6 +89,9 @@ type LoginJSONRequestBody = LoginRequest
 
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
+
+// ChatMultipartRequestBody defines body for Chat for multipart/form-data ContentType.
+type ChatMultipartRequestBody ChatMultipartBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -101,6 +110,9 @@ type ServerInterface interface {
 	// Validate current authentication token
 	// (GET /api/auth/validate-token)
 	ValidateToken(w http.ResponseWriter, r *http.Request)
+	// Chat with voice assistant (send audio, get text)
+	// (POST /api/chat)
+	Chat(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -185,6 +197,26 @@ func (siw *ServerInterfaceWrapper) ValidateToken(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ValidateToken(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// Chat operation middleware
+func (siw *ServerInterfaceWrapper) Chat(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.Chat(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -319,6 +351,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/api/auth/logout", wrapper.Logout)
 	m.HandleFunc("POST "+options.BaseURL+"/api/auth/register", wrapper.Register)
 	m.HandleFunc("GET "+options.BaseURL+"/api/auth/validate-token", wrapper.ValidateToken)
+	m.HandleFunc("POST "+options.BaseURL+"/api/chat", wrapper.Chat)
 
 	return m
 }
@@ -326,22 +359,23 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/9xX328bNwz+Vwhtj1c73boXv6VDB2TYQ5Cm3UMQDIpEn9XcSVeK58Yr/L8PlPwjZ9+l",
-	"7lbHxZ5sSxRJffz4Uf6sTKib4NFzVJPPKpoZ1jp9/TX4qaP6Ta1ddYUfW4wsyw2FBokdJiMTLMonLxpU",
-	"ExWZnC/VslAox3p2loUi/Ng6QqsmNyuzIvu5LdbW4e4DGhY/3SxiE3zE/TQIp4Rx9heHe/SyYDEacg27",
-	"4NVEXeVtyNvFfrYD537/83rozM491lbdRPou9IYo0P4NaoxRl/hlxNaGfb7/CKXzg7UaKkmhGh3jp0D2",
-	"8HptTjyRxv+gWFdYushIp8d0m8kQrI8YhA+6bipMYMox0oIRxNYYjHHaViO4rFBHBDNDcw+L0BKkNIAD",
-	"zJHcdJEXtTGh9Tz6IqZP0fJ6XbBuwt+ojvsRl4WKaFpyvHgrepbDvUZNSOctz+TXXfr1W6Bacw6qiqx+",
-	"4invbhOYMTdqKY6dn4b9nM8vL2AaCObBGQQdo4usPcOdNvforThynAryPlmcbyzOLy9UoeZIMXt6OTob",
-	"nQlooUGvG6cm6ue0JPzgWbrJWDdurFuejU1WxxcbGjYhs1RwTkW/sGrSEVGVMcTIr4NdZA33jD4d001T",
-	"OZMOjj/E4LcjQb79SDhVE/XDeDszxquBMe6bFstuwZhaTAuZwekqP52dHSmFVZukHLrFSgawgg7to7ao",
-	"FoL8q2+YU1b7niQu/FxXzgKtsZK4r44f911ESlTlGUJDYe4s2tz7YxnC4APDNLTeSkq/PA8UjOR1BRFp",
-	"jgS4MixUbOta02LLYGgl/axU2lrCGKW3dBlFD6S30fMqPXUrLra9UslUGu6RNLSO1BydufzMXdEdxj3w",
-	"J4NHTXDaFnj5fHENoRW66Cp+V1zPBeEAJTJo6MzDQ5keWn6S6rL/H0l3wOvj7SNlhSqUJVrIkfcH++4M",
-	"7+NpaHmPqM9AmHdeYA3k/kY7gjV9AkHtYnS+BN0pR67W6LScAtsKtJC5IEovqI06jyM1uek+i25ul7c7",
-	"TJR6gWmJ0HNS34NZSKsX6zAP12/aI6nu7uP9IOF9eYTww9o79Dw/lQYLqdOI1RWhtgvABxf5+5LHNa6g",
-	"weOnr+NkuqxmfLH571FiDzHfr8yuN38Uj6uTKQ64CCm/0b/Tx10nJ1XHAvChkT4rDtDJr5GkdWk2mtTn",
-	"80k+LJf/BAAA//+k560v9RIAAA==",
+	"H4sIAAAAAAAC/9xYUW8bNwz+K4S2hw242MnWvfgtLTogwx6CNO0egmBQTjxbzZ10pXhOvML/faDks3P2",
+	"2XG2OCn6ZFuiSIr8+JHyV5X7qvYOHQc1+qpCPsFKx6/vvCssVe8rbcsL/NJgYFmuyddIbDEK5d6gfPKs",
+	"RjVSgcm6sZpnCuVYz848U4RfGkto1OhqIZYlPddZK+1vPmPOoqfrRai9C7jpBmFBGCZ/s79FJwsGQ062",
+	"ZuudGqmLtA1pO9v0dsu5P/663HZm7R6tVNeRvgu9J/K0eYMKQ9BjfDxirWCf7j/92LqtudqWkkzVOoQ7",
+	"T2b/fC1P7HDjO0jWBY5tYKTXj+nKk21hfYAgvNdVXWIMphwjLTGC0OQ5hlA05QDOS9QBIZ9gfgsz3xBE",
+	"N4A9TJFsMUuLOs9943jwaEx3wfKyTVjX4WfK46bFeaYC5g1Znn0QPkvm3qImpNOGJ/LrJv763VOlORlV",
+	"WWI/0ZR2Vw5MmGs1F8XWFX7T59PzMyg8wdTbHEGHYANrx3Cj81t0RhRZjgn5FCVOlxKn52cqU1OkkDSd",
+	"DI4HxxI0X6PTtVUj9WtcEnzwJN5kqGs71A1Phnlix6MlDGufUCpxjkk/M2rUIVGVYoiB33ozSxzuGF08",
+	"puu6tHk8OPwcvFu1BPn2I2GhRuqH4apnDBcNY9jXLebdhDE1GBcSguNVfjk+PpALizKJPnSTFQVgETo0",
+	"D8qinEnk3zyjT4nte5w4c1NdWgPUxkrsvjm83Y8BKUKVJwg1+ak1aFLtD6UJg/MMhW+cEZd+e5lQMJLT",
+	"JQSkKRLgQjBToakqTbMVgqER9xNTaWMIQ5Da0uMgfCC1jY4X7qlrUbGqlVK60vYaiU3rQMXR6csvXBXd",
+	"ZtwT/ijwoAhetwROXs5uTmgELroM3xTWU0LYwxgZNHT64b5I9w3vhLrs/0/Q7TF9fHjArFD68RgNJMub",
+	"jX29h/fh1De8AdQXAMxHJ2H1ZP9BM4AWPp6gsiFYNwbdSUfK1uB1MQWmkdBCwoIwvURt0BmO1OiqOxZd",
+	"Xc+v15Ao+YK8IULHkX33RiEtJtbtOGxn2gOx7vrwvhfxnhzA/Hbu3TaevxYHC6hji9UloTYzwHsb+Nui",
+	"xzauoMHh3dMwGS+rGY+Wb48x9gDz00LscvlQPCxPRjtgA0T/Bv+NH9eVvCo7ZoD3tdRZtgdPPoWS2tQs",
+	"OalP5z54yCd6R4t8J7u7aKlqSra1Jh4Wnqojo1nvSrtujI3vxqJ9cd5YJzfaM9XPOy+uvcPxnvv/pXgU",
+	"cy23QUG+Wn/9fveD5EPkPw3FAi+4szzZ+Mfgp4DOQIRLFgdAyc7PYn3+bwAAAP///ysu7KwVAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

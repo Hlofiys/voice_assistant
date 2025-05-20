@@ -88,7 +88,7 @@ components:
         refresh_token:
           type: string
           description: Refresh token
-      
+
 paths:
   /api/auth/register:
     post:
@@ -100,27 +100,27 @@ paths:
         required: true
         content:
           application/json:
-            schema: 
-              $ref: '#/components/schemas/RegisterRequest'
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
       responses:
-        '201':
+        "201":
           description: Registration successful.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RegisterResponse'
-        '400':
+                $ref: "#/components/schemas/RegisterResponse"
+        "400":
           description: Invalid request or user already exists
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/auth/login:
     post:
@@ -133,32 +133,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LoginRequest'
+              $ref: "#/components/schemas/LoginRequest"
       responses:
-        '200':
+        "200":
           description: Login successful
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LoginResponse'
-        '400':
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
           description: Invalid request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Invalid credentials
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/auth/confirm-email:
     post:
@@ -171,32 +171,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ConfirmEmailRequest'
+              $ref: "#/components/schemas/ConfirmEmailRequest"
       responses:
-        '200':
+        "200":
           description: Email confirmed successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ConfirmEmailResponse'
-        '400':
+                $ref: "#/components/schemas/ConfirmEmailResponse"
+        "400":
           description: Invalid request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: User for the provided email/code not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/auth/logout:
     post:
@@ -207,7 +207,7 @@ paths:
       security:
         - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Logout successful
           content:
             application/json:
@@ -217,29 +217,29 @@ paths:
                   message:
                     type: string
                     example: Successfully logged out
-        '401':
+        "401":
           description: Unauthorized. Invalid or missing authentication token.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
+                $ref: "#/components/schemas/Error"
+        "500":
           description: Internal server error during logout process.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/auth/validate-token:
-    get: 
+    get:
       tags:
         - Authentication
       summary: Validate current authentication token
       operationId: validateToken
       security:
-        - BearerAuth: [] 
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Token is valid.
           content:
             application/json:
@@ -249,13 +249,48 @@ paths:
                   message:
                     type: string
                     example: "Token is valid."
-        '401': 
+        "401":
           description: Unauthorized. Invalid, expired, or missing authentication token.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-      
-        
-      
+                $ref: "#/components/schemas/Error"
 
+  /api/chat:
+    post:
+      summary: Chat with voice assistant (send audio, get text)
+      operationId: chat
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                audio:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Response from voice assistant
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  text:
+                    type: string
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

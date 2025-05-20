@@ -1,11 +1,11 @@
 package tools
 
 import (
-	"fmt"
-	"time"
-	"io"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
+	"io"
+	"time"
 	"voice_assistant/util"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -29,12 +29,12 @@ func (f *Authenticator) GenerateToken(userID uuid.UUID) (string, error) {
 	now := time.Now()
 	tokenDuration := time.Hour * 24 * 30
 	claims := jwt.MapClaims{
-		"sub":   userID,
-		"exp":   now.Add(tokenDuration).Unix(),
-		"iat":   now.Unix(),
-		"nbf":   now.Unix(),
-		"iss":   f.Config.JwtIssuer,
-		"aud":   f.Config.JwtAudience,
+		"sub": userID,
+		"exp": now.Add(tokenDuration).Unix(),
+		"iat": now.Unix(),
+		"nbf": now.Unix(),
+		"iss": f.Config.JwtIssuer,
+		"aud": f.Config.JwtAudience,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -62,7 +62,7 @@ func (f *Authenticator) GenerateRefreshToken() (string, time.Time, error) {
 	}
 
 	now := time.Now()
-	expiresAt := now.AddDate(0, 1, 0) 
+	expiresAt := now.AddDate(0, 1, 0)
 
 	return refreshToken, expiresAt, nil
 }

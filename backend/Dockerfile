@@ -12,16 +12,16 @@ RUN go mod download
 COPY . .
 
 # Build the Go application
-RUN CGO_ENABLED=0 GOOS=linux go build -o branch-service .
+RUN CGO_ENABLED=0 GOOS=linux go build -o voice_assistant .
 
 # Stage 2: Final stage
-FROM alpine:edge
+FROM alpine:latest
 
 # Set the working directory
 WORKDIR /app
 
 # Copy the binary from the build stage
-COPY --from=build /app/branch-service .
+COPY --from=build /app/voice_assistant .
 COPY --from=build /app/app.env .
 COPY --from=build /app/api.yaml .
 
@@ -29,4 +29,4 @@ COPY --from=build /app/api.yaml .
 RUN apk --no-cache add ca-certificates tzdata
 
 # Set the entrypoint command
-CMD ["/app/branch-service"]
+CMD ["/app/voice_assistant"]

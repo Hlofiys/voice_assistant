@@ -12,9 +12,11 @@ import (
 	"voice_assistant/tools"
 	"voice_assistant/util"
 
+	chromago "github.com/amikos-tech/chroma-go/pkg/api/v2"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/jackc/pgx/v5"
 	middleWare "github.com/oapi-codegen/nethttp-middleware"
+	"google.golang.org/genai"
 )
 
 var db *dbCon.Queries
@@ -70,13 +72,43 @@ func main() {
 	validatorOptions := &middleWare.Options{}
 	validatorOptions.Options.AuthenticationFunc = tools.NewAuthenticator(authenticator)
 
-	server := api.NewServer(*authenticator, db)
+	// Establish database connection
+	ctx := context.Background()
 
-	validator := middleWare.OapiRequestValidatorWithOptions(doc, validatorOptions)
+	// httpOptions := genai.HTTPOptions{
+	// 	BaseURL: "https://google-proxy.hlofiys.xyz/v1beta",
+	// }
+
+	// Create GenAI client
+	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  config.GoogleAPIKey,
+		Backend: genai.BackendGeminiAPI,
+		// HTTPOptions: httpOptions,
+	})
+	if err != nil {
+		log.Fatalf("Failed to create GenAI client: %v", err)
+	}
+
+	// Create Chroma client
+	chromaClient, err := chromago.NewHTTPClient(chromago.WithBaseURL(config.ChromaBaseURL))
+	if err != nil {
+		log.Fatalf("Failed to create Chroma client: %v", err)
+	}
+	// Close the client to release any resources such as local embedding functions
+	defer func() {
+		err = chromaClient.Close()
+		if err != nil {
+			log.Fatalf("Error closing client: %s \n", err)
+		}
+	}()
+
+	server := api.NewServer(*authenticator, genaiClient, chromaClient, config.ChromaCollectionName, db)
+
+	//validator := middleWare.OapiRequestValidatorWithOptions(doc, validatorOptions)
 
 	handler := api.HandlerFromMux(&server, httpHandler)
 
-	handler = validator(handler)
+	//handler = validator(handler)
 
 	// Configure the HTTP server
 	s := &http.Server{

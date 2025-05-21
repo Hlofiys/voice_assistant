@@ -12,10 +12,15 @@ import (
 	"voice_assistant/tools"
 	"voice_assistant/util"
 
+	"github.com/golang-migrate/migrate/v4"
+	pgxv5 "github.com/golang-migrate/migrate/v4/database/pgx"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+
 	chromago "github.com/amikos-tech/chroma-go/pkg/api/v2"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	middleWare "github.com/oapi-codegen/nethttp-middleware"
 	"google.golang.org/genai"
 )
@@ -47,20 +52,37 @@ func main() {
 
 	fmt.Println("API schema loaded and validated successfully...")
 
-	conn, err := pgx.Connect(context.Background(), config.DbSource)
+	log.Printf("Connecting to PostgreSQL database at %s\n", config.DbSource)
+
+	conn, err := pgxpool.New(context.Background(), config.DbSource)
 	if err != nil {
 		log.Fatalf("Could not connect to database: %v", err)
 	}
-	defer func(conn *pgx.Conn, ctx context.Context) {
-		err := conn.Close(ctx)
-		if err != nil {
-			fmt.Println("Error closing connection...")
-		}
-	}(conn, context.Background())
+	defer func(conn *pgxpool.Pool) {
+		conn.Close()
+	}(conn)
 
 	db = dbCon.New(conn)
 
 	fmt.Println("PostgreSql connected successfully...")
+
+	driver, err := pgxv5.WithInstance(stdlib.OpenDBFromPool(conn), &pgxv5.Config{})
+	if err != nil {
+		log.Fatalf("Failed to create database driver: %v", err)
+	}
+	// Run database migrations
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://db/migration",
+		"postgres",
+		driver,
+	)
+	if err != nil {
+		log.Fatalf("Failed to create migration instance: %v", err)
+	}
+	if err = m.Up(); err != nil && err != migrate.ErrNoChange {
+		log.Fatalf("Failed to apply migrations: %v", err)
+	}
+	fmt.Println("Database migrations applied successfully...")
 
 	// Create JWT authenticator
 	authenticator, err := tools.NewJwsAuthenticator(config)

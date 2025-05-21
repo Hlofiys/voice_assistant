@@ -23,6 +23,7 @@ WORKDIR /app
 # Copy the binary from the build stage
 COPY --from=build /app/voice_assistant .
 COPY --from=build /app/api.yaml .
+COPY --from=build /app/db/migration .
 
 # Set the timezone and install CA certificates
 RUN apk --no-cache add ca-certificates tzdata

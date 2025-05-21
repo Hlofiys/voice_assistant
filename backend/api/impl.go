@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"time"
+	"database/sql"
 	"math/big"
 	"net/http"
 	"strings"
@@ -16,6 +18,7 @@ import (
 	g "github.com/amikos-tech/chroma-go/pkg/embeddings/gemini"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/genai"
 )
@@ -60,7 +63,7 @@ func (s *Server) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
 		http.Error(w, `{"message": "could not read request body"}`, http.StatusBadRequest)
-		log.Printf("Error reading request body: %v", err)
+		log.Printf("[ConfirmEmail] Error reading request body: %v", err)
 		return
 	}
 
@@ -69,7 +72,7 @@ func (s *Server) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
-		log.Printf("Error unmarshalling request body: %v", err)
+		log.Printf("[ConfirmEmail] Error unmarshalling request body: %v", err)
 		return
 	}
 
@@ -81,7 +84,7 @@ func (s *Server) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
 	refreshTokenString, refreshTokenExpiresAt, err := s.jwtAuth.GenerateRefreshToken()
 	if err != nil {
 		http.Error(w, `{"message": "failed to generate refresh token"}`, http.StatusInternalServerError)
-		log.Printf("Error generating refresh token for user : %v", err)
+		log.Printf("[ConfirmEmail] Error generating refresh token for user : %v", err)
 		return
 	}
 	updateCodeByIdParams := db.UpdateCodeByIdParams{
@@ -107,7 +110,7 @@ func (s *Server) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := s.jwtAuth.GenerateToken(u)
 	if err != nil {
 		http.Error(w, `{"message": "failed to generate access token"}`, http.StatusInternalServerError)
-		log.Printf("Error generating access token: %v", err)
+		log.Printf("[ConfirmEmail] Error generating access token: %v", err)
 		return
 	}
 
@@ -119,25 +122,174 @@ func (s *Server) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("Error encoding success response: %v", err)
+		log.Printf("[ConfirmEmail] Error encoding success response: %v", err)
 	}
 }
 
 func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
-	panic("Login endpoint not implemented yet.")
+	bodyBytes, err := io.ReadAll(r.Body)
+	defer func() { _ = r.Body.Close() }()
+	if err != nil {
+		http.Error(w, `{"message": "could not read request body"}`, http.StatusBadRequest)
+		log.Printf("[Login] Error reading request body: %v", err)
+		return
+	}
+
+	var loginRequest * LoginRequest
+
+	err = json.Unmarshal(bodyBytes,&loginRequest)
+	if err != nil {
+		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
+		log.Printf("[Login] Error unmarshalling request body: %v", err)
+		return
+	}
+
+	if loginRequest.Email == "" || loginRequest.Password == "" {
+		http.Error(w, `{"message": "email and password are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	hashedPasswordFromDB, err := s.db.GetPasswordByEmail(r.Context(), loginRequest.Email)
+	if err != nil {
+		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+			log.Printf("[Login] User not found for email: %s", loginRequest.Email)
+			http.Error(w, `{"message": "invalid email or password"}`, http.StatusUnauthorized)
+			return
+		}
+		log.Printf("[Login] Database error fetching password for email %s: %v", loginRequest.Email, err)
+		http.Error(w, `{"message": "internal server error while fetching user data"}`, http.StatusInternalServerError)
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(hashedPasswordFromDB), []byte(loginRequest.Password))
+	if err != nil {
+		log.Printf("[Login] Invalid password for email: %s", loginRequest.Email)
+		http.Error(w, `{"message": "invalid email or password"}`, http.StatusUnauthorized)
+		return
+	}
+
+	pgDbUserID, err := s.db.GetUserByEmailAndPassword(r.Context(), db.GetUserByEmailAndPasswordParams{
+		Email:    loginRequest.Email,
+		Password: hashedPasswordFromDB, 
+	})
+	if err != nil {
+		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+			log.Printf("[Login] User disappeared after password check for email: %s", loginRequest.Email)
+			http.Error(w, `{"message": "internal server error - inconsistent user data"}`, http.StatusInternalServerError)
+			return
+		}
+		log.Printf("[Login] Database error fetching user_id for email %s: %v", loginRequest.Email, err)
+		http.Error(w, `{"message": "internal server error while fetching user id"}`, http.StatusInternalServerError)
+		return
+	}
+
+	refreshTokenString, refreshTokenExpiresAt, err := s.jwtAuth.GenerateRefreshToken()
+	if err != nil {
+		http.Error(w, `{"message": "failed to generate refresh token"}`, http.StatusInternalServerError)
+		log.Printf("[Login] Error generating refresh token for user %s: %v", loginRequest.Email, err)
+		return
+	}
+
+	updateTokenParams := db.UpdateRefreshTokenParams{
+		RefreshToken: pgtype.Text{String: refreshTokenString, Valid: true},
+		ExpiredAt:    pgtype.Timestamp{Time: refreshTokenExpiresAt, Valid: true},
+		UserID:       pgDbUserID, 
+	}
+	err = s.db.UpdateRefreshToken(r.Context(), updateTokenParams)
+	if err != nil {
+		log.Printf("[Login] Failed to update refresh token for user %s (ID: %s): %v", loginRequest.Email, pgDbUserID.Bytes, err) 
+		http.Error(w, `{"message": "failed to save session"}`, http.StatusInternalServerError)
+		return
+	}
+
+	appUserID, err := uuid.FromBytes(pgDbUserID.Bytes[:])
+	if err != nil {
+		http.Error(w, `{"message": "internal server error - user ID conversion failed"}`, http.StatusInternalServerError)
+		log.Printf("[Login] Error converting user ID for %s: %v", loginRequest.Email, err)
+		return
+	}
+
+	accessToken, err := s.jwtAuth.GenerateToken(appUserID)
+	if err != nil {
+		http.Error(w, `{"message": "failed to generate access token"}`, http.StatusInternalServerError)
+		log.Printf("[Login] Error generating access token for user %s: %v", loginRequest.Email, err)
+		return
+	}
+
+	response := LoginResponse{
+		Token:        accessToken,
+		RefreshToken: refreshTokenString,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("[Login] Error encoding success response for user %s: %v", loginRequest.Email, err)
+	}
+
+}
+
+func (s *Server) ValidateRefreshToken (w http.ResponseWriter, r *http.Request){
+	bodyBytes, err := io.ReadAll(r.Body)
+	defer func() { _ = r.Body.Close() }()
+	if err != nil {
+		http.Error(w, `{"message": "could not read request body"}`, http.StatusBadRequest)
+		log.Printf("[ValidateRefreshToken] Error reading request body: %v", err)
+		return
+	}
+
+	var refreshTokenValidateRequest * RefreshTokenValidateRequest
+	err = json.Unmarshal(bodyBytes,&refreshTokenValidateRequest)
+
+	if err != nil {
+		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
+		log.Printf("[ValidateRefreshToken] Error unmarshalling request body: %v", err)
+		return
+	}
+
+	if refreshTokenValidateRequest.RefreshToken == "" {
+		http.Error(w, `{"message": "refresh token are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	params := db.VerifyRefreshTokenParams{
+		RefreshToken: pgtype.Text{String: refreshTokenValidateRequest.RefreshToken, Valid: true},
+		ExpiredAt:    pgtype.Timestamp{Time: time.Now(), Valid: true},
+	}
+
+	updated, err := s.db.VerifyRefreshToken(r.Context(), params)
+	if err != nil {
+		log.Printf("[ValidateRefreshToken] Database error verifying refresh token: %v", err)
+		http.Error(w, `{"message": "internal server error while validating token"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if !updated { 
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(map[string]string{"message": "Token is valid"}); err != nil {
+			log.Printf("[ValidateRefreshToken] Error encoding 'Token is valid' response: %v", err)
+		}
+	} else { 
+		w.WriteHeader(http.StatusUnauthorized)
+		if err := json.NewEncoder(w).Encode(map[string]string{"message": "Token is invalid"}); err != nil {
+			log.Printf("[ValidateRefreshToken] Error encoding 'Token is invalid' response: %v", err)
+		}
+	}
 }
 
 func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
 	userIDFromToken, ok := r.Context().Value(tools.UserIDContextKey).(string)
 	if !ok || userIDFromToken == "" {
-		log.Println("UserID not found in context. Auth middleware might not have run or token is problematic.")
+		log.Println("[Logout] UserID not found in context. Auth middleware might not have run or token is problematic.")
 		http.Error(w, `{"message": "Unauthorized: User identification not found"}`, http.StatusUnauthorized)
 		return
 	}
 
 	parsedUUID, err := uuid.Parse(userIDFromToken)
 	if err != nil {
-		log.Printf("UserID '%s' from token is not a valid UUID format: %v", userIDFromToken, err)
+		log.Printf("[Logout] UserID '%s' from token is not a valid UUID format: %v", userIDFromToken, err)
 		http.Error(w, `{"message": "Unauthorized: Invalid user identification format in token"}`, http.StatusUnauthorized)
 		return
 	}
@@ -146,7 +298,7 @@ func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
 
 	err = s.db.LogoutById(r.Context(), pgUserIDToLogout)
 	if err != nil {
-		log.Printf("Database error while invalidating refresh token for UserID '%s': %v", userIDFromToken, err)
+		log.Printf("[Logout] Database error while invalidating refresh token for UserID '%s': %v", userIDFromToken, err)
 		http.Error(w, `{"message": "Logout failed due to a server error"}`, http.StatusInternalServerError)
 		return
 	}
@@ -164,7 +316,7 @@ func (s *Server) Register(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
 		http.Error(w, `{"message": "could not read request body"}`, http.StatusBadRequest)
-		log.Printf("Error reading request body: %v", err)
+		log.Printf("[Register] Error reading request body: %v", err)
 		return
 	}
 
@@ -173,7 +325,7 @@ func (s *Server) Register(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
-		log.Printf("Error unmarshalling request body: %v", err)
+		log.Printf("[Register] Error unmarshalling request body: %v", err)
 		return
 	}
 
@@ -185,21 +337,21 @@ func (s *Server) Register(w http.ResponseWriter, r *http.Request) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(registerRequest.Password), bcrypt.DefaultCost)
 	if err != nil {
 		http.Error(w, `{"message": "failed to hash password"}`, http.StatusInternalServerError)
-		log.Printf("Error hashing password: %v", err)
+		log.Printf("[Register] Error hashing password: %v", err)
 		return
 	}
 
 	userID, err := uuid.NewRandom()
 	if err != nil {
 		http.Error(w, `{"message": "failed to generate user ID"}`, http.StatusInternalServerError)
-		log.Printf("Error generating userID: %v", err)
+		log.Printf("[Register] Error generating userID: %v", err)
 		return
 	}
 
 	confirmationCode, err := generateNumericCode(6)
 	if err != nil {
 		http.Error(w, `{"message": "failed to generate confirmation code"}`, http.StatusInternalServerError)
-		log.Printf("Error generating confirmation code: %v", err)
+		log.Printf("[Register] Error generating confirmation code: %v", err)
 		return
 	}
 
@@ -213,7 +365,7 @@ func (s *Server) Register(w http.ResponseWriter, r *http.Request) {
 	err = s.db.CreateUser(r.Context(), createUserParams)
 	if err != nil {
 		http.Error(w, `{"message": "failed to register user"}`, http.StatusInternalServerError)
-		log.Printf("Error creating user in DB: %v", err)
+		log.Printf("[Register] Error creating user in DB: %v", err)
 		return
 	}
 
@@ -224,7 +376,7 @@ func (s *Server) Register(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("Error encoding success response: %v", err)
+		log.Printf("[Register] Error encoding success response: %v", err)
 	}
 
 }

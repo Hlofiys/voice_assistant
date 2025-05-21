@@ -88,6 +88,13 @@ components:
         refresh_token:
           type: string
           description: Refresh token
+    RefreshTokenValidateRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
 
 paths:
   /api/auth/register:
@@ -218,13 +225,13 @@ paths:
                     type: string
                     example: Successfully logged out
         "401":
-          description: Unauthorized. Invalid or missing authentication token.
+          description: Unauthorized. Invalid or missing authentication token
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "500":
-          description: Internal server error during logout process.
+          description: Internal server error during logout process
           content:
             application/json:
               schema:
@@ -250,7 +257,49 @@ paths:
                     type: string
                     example: "Token is valid."
         "401":
-          description: Unauthorized. Invalid, expired, or missing authentication token.
+          description: Unauthorized. Invalid, expired, or missing authentication token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/refresh-token/validate:
+    post:
+      tags:
+        - Authentication
+      summary: Checking the validity of the refresh token
+      operationId: validateRefreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenValidateRequest"
+      responses:
+        "200" :
+          description: Refresh token is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Token is valid"
+        "400" :
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401" :
+          description: Unauthorized. The refresh token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error during logout process
           content:
             application/json:
               schema:

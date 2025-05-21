@@ -59,6 +59,11 @@ type LoginResponse struct {
 	Token string `json:"token"`
 }
 
+// RefreshTokenValidateRequest defines model for RefreshTokenValidateRequest.
+type RefreshTokenValidateRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
 	Email    string `json:"email"`
@@ -87,6 +92,9 @@ type ConfirmEmailJSONRequestBody = ConfirmEmailRequest
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
+// ValidateRefreshTokenJSONRequestBody defines body for ValidateRefreshToken for application/json ContentType.
+type ValidateRefreshTokenJSONRequestBody = RefreshTokenValidateRequest
+
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
 
@@ -104,6 +112,9 @@ type ServerInterface interface {
 	// Log out current user
 	// (POST /api/auth/logout)
 	Logout(w http.ResponseWriter, r *http.Request)
+	// Checking the validity of the refresh token
+	// (POST /api/auth/refresh-token/validate)
+	ValidateRefreshToken(w http.ResponseWriter, r *http.Request)
 	// Register a new user
 	// (POST /api/auth/register)
 	Register(w http.ResponseWriter, r *http.Request)
@@ -163,6 +174,20 @@ func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Logout(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ValidateRefreshToken operation middleware
+func (siw *ServerInterfaceWrapper) ValidateRefreshToken(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ValidateRefreshToken(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -349,6 +374,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/api/auth/confirm-email", wrapper.ConfirmEmail)
 	m.HandleFunc("POST "+options.BaseURL+"/api/auth/login", wrapper.Login)
 	m.HandleFunc("POST "+options.BaseURL+"/api/auth/logout", wrapper.Logout)
+	m.HandleFunc("POST "+options.BaseURL+"/api/auth/refresh-token/validate", wrapper.ValidateRefreshToken)
 	m.HandleFunc("POST "+options.BaseURL+"/api/auth/register", wrapper.Register)
 	m.HandleFunc("GET "+options.BaseURL+"/api/auth/validate-token", wrapper.ValidateToken)
 	m.HandleFunc("POST "+options.BaseURL+"/api/chat", wrapper.Chat)
@@ -359,23 +385,25 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"Cbcwzs7PvPvq3wAAAP//oE/9Aa8ZAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

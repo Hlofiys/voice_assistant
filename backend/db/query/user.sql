@@ -9,21 +9,32 @@ INSERT INTO users (
 );
 
 -- name: VerifyRefreshToken :one
-SELECT EXISTS (
-    SELECT 1
-    FROM users
-    WHERE user_id = $1                               
-      AND refresh_token = $2                         
-      AND refresh_token IS NOT NULL                  
-      AND expired_at IS NOT NULL                     
-      AND $3 >= expired_at                           
-      AND $3 <= expired_at + INTERVAL '1 month'      
-);
+WITH updated_rows AS (
+    UPDATE users
+    SET refresh_token = NULL, expired_at = NULL
+    WHERE refresh_token = $1
+          AND refresh_token IS NOT NULL
+          AND expired_at IS NOT NULL
+          AND $2 >= expired_at
+          AND $2 <= expired_at + INTERVAL '1 month'
+    RETURNING 1 
+)
+SELECT EXISTS (SELECT 1 FROM updated_rows);
 
 -- name: UpdateRefreshToken :exec
 UPDATE users
-SET refresh_token = $1
-WHERE user_id = $2;
+SET refresh_token = $1, expired_at = $2
+WHERE user_id = $3;
+
+-- name: GetUserByEmailAndPassword :one
+SELECT user_id
+FROM users
+WHERE email = $1 AND password = $2;
+
+-- name: GetPasswordByEmail :one
+SELECT password
+FROM users
+WHERE email = $1;
 
 -- name: LogoutById :exec
 UPDATE users

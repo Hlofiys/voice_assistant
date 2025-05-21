@@ -39,6 +39,37 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 	return err
 }
 
+const getPasswordByEmail = `-- name: GetPasswordByEmail :one
+SELECT password
+FROM users
+WHERE email = $1
+`
+
+func (q *Queries) GetPasswordByEmail(ctx context.Context, email string) (string, error) {
+	row := q.db.QueryRow(ctx, getPasswordByEmail, email)
+	var password string
+	err := row.Scan(&password)
+	return password, err
+}
+
+const getUserByEmailAndPassword = `-- name: GetUserByEmailAndPassword :one
+SELECT user_id
+FROM users
+WHERE email = $1 AND password = $2
+`
+
+type GetUserByEmailAndPasswordParams struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (q *Queries) GetUserByEmailAndPassword(ctx context.Context, arg GetUserByEmailAndPasswordParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getUserByEmailAndPassword, arg.Email, arg.Password)
+	var user_id pgtype.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const logoutById = `-- name: LogoutById :exec
 UPDATE users
 SET refresh_token = NULL, expired_at = NULL
@@ -78,41 +109,42 @@ func (q *Queries) UpdateCodeById(ctx context.Context, arg UpdateCodeByIdParams) 
 
 const updateRefreshToken = `-- name: UpdateRefreshToken :exec
 UPDATE users
-SET refresh_token = $1
-WHERE user_id = $2
+SET refresh_token = $1, expired_at = $2
+WHERE user_id = $3
 `
 
 type UpdateRefreshTokenParams struct {
-	RefreshToken pgtype.Text `json:"refresh_token"`
-	UserID       pgtype.UUID `json:"user_id"`
+	RefreshToken pgtype.Text      `json:"refresh_token"`
+	ExpiredAt    pgtype.Timestamp `json:"expired_at"`
+	UserID       pgtype.UUID      `json:"user_id"`
 }
 
 func (q *Queries) UpdateRefreshToken(ctx context.Context, arg UpdateRefreshTokenParams) error {
-	_, err := q.db.Exec(ctx, updateRefreshToken, arg.RefreshToken, arg.UserID)
+	_, err := q.db.Exec(ctx, updateRefreshToken, arg.RefreshToken, arg.ExpiredAt, arg.UserID)
 	return err
 }
 
 const verifyRefreshToken = `-- name: VerifyRefreshToken :one
-SELECT EXISTS (
-    SELECT 1
-    FROM users
-    WHERE user_id = $1                               
-      AND refresh_token = $2                         
-      AND refresh_token IS NOT NULL                  
-      AND expired_at IS NOT NULL                     
-      AND $3 >= expired_at                           
-      AND $3 <= expired_at + INTERVAL '1 month'      
+WITH updated_rows AS (
+    UPDATE users
+    SET refresh_token = NULL, expired_at = NULL
+    WHERE refresh_token = $1
+          AND refresh_token IS NOT NULL
+          AND expired_at IS NOT NULL
+          AND $2 >= expired_at
+          AND $2 <= expired_at + INTERVAL '1 month'
+    RETURNING 1 
 )
+SELECT EXISTS (SELECT 1 FROM updated_rows)
 `
 
 type VerifyRefreshTokenParams struct {
-	UserID       pgtype.UUID      `json:"user_id"`
 	RefreshToken pgtype.Text      `json:"refresh_token"`
 	ExpiredAt    pgtype.Timestamp `json:"expired_at"`
 }
 
 func (q *Queries) VerifyRefreshToken(ctx context.Context, arg VerifyRefreshTokenParams) (bool, error) {
-	row := q.db.QueryRow(ctx, verifyRefreshToken, arg.UserID, arg.RefreshToken, arg.ExpiredAt)
+	row := q.db.QueryRow(ctx, verifyRefreshToken, arg.RefreshToken, arg.ExpiredAt)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err

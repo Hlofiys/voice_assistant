@@ -104,11 +104,11 @@ func main() {
 
 	server := api.NewServer(*authenticator, genaiClient, chromaClient, config.ChromaCollectionName, db)
 
-	//validator := middleWare.OapiRequestValidatorWithOptions(doc, validatorOptions)
+	validator := middleWare.OapiRequestValidatorWithOptions(doc, validatorOptions)
 
 	handler := api.HandlerFromMux(&server, httpHandler)
 
-	//handler = validator(handler)
+	handler = validator(handler)
 
 	// Configure the HTTP server
 	s := &http.Server{

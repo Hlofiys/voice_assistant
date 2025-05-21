@@ -14,6 +14,7 @@ import (
 
 	chromago "github.com/amikos-tech/chroma-go/pkg/api/v2"
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/jackc/pgx/v5"
 	middleWare "github.com/oapi-codegen/nethttp-middleware"
 	"google.golang.org/genai"
@@ -41,6 +42,8 @@ func main() {
 	if err = doc.Validate(loader.Context); err != nil {
 		panic(err)
 	}
+
+	doc.Servers = nil
 
 	fmt.Println("API schema loaded and validated successfully...")
 
@@ -75,15 +78,14 @@ func main() {
 	// Establish database connection
 	ctx := context.Background()
 
-	// httpOptions := genai.HTTPOptions{
-	// 	BaseURL: "https://google-proxy.hlofiys.xyz/v1beta",
-	// }
+	httpOptions := genai.HTTPOptions{
+		BaseURL: "https://google-proxy.hlofiys.xyz/",
+	}
 
 	// Create GenAI client
 	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  config.GoogleAPIKey,
-		Backend: genai.BackendGeminiAPI,
-		// HTTPOptions: httpOptions,
+		APIKey:      config.GoogleAPIKey,
+		HTTPOptions: httpOptions,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create GenAI client: %v", err)
@@ -104,6 +106,7 @@ func main() {
 
 	server := api.NewServer(*authenticator, genaiClient, chromaClient, config.ChromaCollectionName, db)
 
+	openapi3filter.RegisterBodyDecoder("audio/mp4", openapi3filter.FileBodyDecoder)
 	validator := middleWare.OapiRequestValidatorWithOptions(doc, validatorOptions)
 
 	handler := api.HandlerFromMux(&server, httpHandler)

@@ -10,9 +10,8 @@ import (
 	"net/http"
 	"strings"
 	db "voice_assistant/db/sqlc"
-	"voice_assistant/tools" // Assuming your tools.UtilConfig is here
+	"voice_assistant/tools"
 
-	// Assuming your util.Config is here for consistency
 	chromago "github.com/amikos-tech/chroma-go/pkg/api/v2"
 	g "github.com/amikos-tech/chroma-go/pkg/embeddings/gemini"
 	"github.com/google/uuid"

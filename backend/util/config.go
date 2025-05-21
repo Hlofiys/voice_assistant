@@ -51,8 +51,29 @@ func LoadConfig(path string) (config Config, err error) {
 	if config.ServerAddress == "" {
 		config.ServerAddress = "8080" // Default port
 	}
+	if config.DbDriver == "" {
+		config.DbDriver = "postgres"
+	}
+	if config.DbSource == "" {
+		config.DbSource = "postgresql://postgres:postgres@db:5432/assistant?sslmode=disable"
+	}
+	if config.PostgresUser == "" {
+		config.PostgresUser = "postgres"
+	}
+	if config.PostgresPassword == "" {
+		config.PostgresPassword = "postgres"
+	}
+	if config.PostgresDb == "" {
+		config.PostgresDb = "assistant"
+	}
+	if config.JwtIssuer == "" {
+		config.JwtIssuer = "assistant-auth-api"
+	}
+	if config.JwtAudience == "" {
+		config.JwtAudience = "assistant-client"
+	}
 	if config.ChromaBaseURL == "" {
-		config.ChromaBaseURL = "http://192.168.1.34:8000"
+		config.ChromaBaseURL = "http://chromadb:8000"
 	}
 	if config.ChromaCollectionName == "" {
 		config.ChromaCollectionName = "chatbot-collection"

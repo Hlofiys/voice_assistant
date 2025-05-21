@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: assistant
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  chromadb:
+    image: chromadb/chroma:latest
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      - postgres
+      - chromadb
+    environment:
+      DB_DRIVER: postgres
+      DB_SOURCE: postgresql://postgres:postgres@postgres:5432/assistant?sslmode=disable
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: assistant
+      SERVER_ADDRESS: 0.0.0.0:8080
+      CHROMA_BASE_URL: http://chromadb:8000
+      CHROMA_COLLECTION_NAME: chatbot-collection
+      GOOGLE_EMBEDDING_MODEL_NAME: text-embedding-004
+      GOOGLE_CHAT_MODEL_NAME: gemini-2.0-flash-lite
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app
+
+volumes:
+  postgres_data:

@@ -1,6 +1,6 @@
 # Stage 1: Build stage
 FROM golang:alpine AS build
-
+RUN apk add --no-cache gcc musl-dev
 # Set the working directory
 WORKDIR /app
 
@@ -12,7 +12,7 @@ RUN go mod download
 COPY . .
 
 # Build the Go application
-RUN CGO_ENABLED=0 GOOS=linux go build -o voice_assistant .
+RUN CGO_ENABLED=1 GOOS=linux go build -o voice_assistant .
 
 # Stage 2: Final stage
 FROM alpine:latest
@@ -22,7 +22,6 @@ WORKDIR /app
 
 # Copy the binary from the build stage
 COPY --from=build /app/voice_assistant .
-COPY --from=build /app/app.env .
 COPY --from=build /app/api.yaml .
 
 # Set the timezone and install CA certificates

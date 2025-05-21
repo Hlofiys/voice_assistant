@@ -127,13 +127,11 @@ func (q *Queries) UpdateRefreshToken(ctx context.Context, arg UpdateRefreshToken
 const verifyRefreshToken = `-- name: VerifyRefreshToken :one
 WITH updated_rows AS (
     UPDATE users
-    SET refresh_token = NULL, expired_at = NULL
-    WHERE refresh_token = $1
-          AND refresh_token IS NOT NULL
-          AND expired_at IS NOT NULL
-          AND $2 >= expired_at
-          AND $2 <= expired_at + INTERVAL '1 month'
-    RETURNING 1 
+    SET refresh_token = NULL, expired_at = NULL 
+    WHERE refresh_token = $1 
+      AND expired_at IS NOT NULL 
+      AND $2 <= expired_at     
+    RETURNING 1
 )
 SELECT EXISTS (SELECT 1 FROM updated_rows)
 `

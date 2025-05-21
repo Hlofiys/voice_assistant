@@ -266,7 +266,7 @@ func (s *Server) ValidateRefreshToken (w http.ResponseWriter, r *http.Request){
 
 	w.Header().Set("Content-Type", "application/json")
 
-	if !updated { 
+	if updated { 
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(map[string]string{"message": "Token is valid"}); err != nil {
 			log.Printf("[ValidateRefreshToken] Error encoding 'Token is valid' response: %v", err)

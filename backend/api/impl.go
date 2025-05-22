@@ -400,7 +400,7 @@ func (s *Server) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := RegisterResponse{
-		Message: "Registration successful. Please check your email to verify your account.",
+		Message: "Registration successful. Please check your email to verify your account. Your confirmation code is: #" + confirmationCode,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

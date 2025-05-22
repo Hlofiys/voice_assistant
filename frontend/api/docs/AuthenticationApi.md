@@ -7,6 +7,7 @@ All URIs are relative to *http://localhost*
 |[**confirmEmail**](#confirmemail) | **POST** /api/auth/confirm-email | Confirm user email address|
 |[**login**](#login) | **POST** /api/auth/login | Login to get a JWT token|
 |[**logout**](#logout) | **POST** /api/auth/logout | Log out current user|
+|[**refreshTokens**](#refreshtokens) | **POST** /api/auth/refresh | Refresh access and refresh tokens|
 |[**register**](#register) | **POST** /api/auth/register | Register a new user|
 |[**validateToken**](#validatetoken) | **GET** /api/auth/validate-token | Validate current authentication token|
 
@@ -158,8 +159,62 @@ This endpoint does not have any parameters.
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | Logout successful |  -  |
-|**401** | Unauthorized. Invalid or missing authentication token. |  -  |
-|**500** | Internal server error during logout process. |  -  |
+|**401** | Unauthorized. Invalid or missing authentication token |  -  |
+|**500** | Internal server error during logout process |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **refreshTokens**
+> RefreshResponse refreshTokens(refreshRequest)
+
+
+### Example
+
+```typescript
+import {
+    AuthenticationApi,
+    Configuration,
+    RefreshRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new AuthenticationApi(configuration);
+
+let refreshRequest: RefreshRequest; //
+
+const { status, data } = await apiInstance.refreshTokens(
+    refreshRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **refreshRequest** | **RefreshRequest**|  | |
+
+
+### Return type
+
+**RefreshResponse**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | Tokens refreshed successfully |  -  |
+|**400** | Invalid request |  -  |
+|**401** | Unauthorized. The refresh token is invalid |  -  |
+|**500** | Internal server error during logout process |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
@@ -256,7 +311,7 @@ This endpoint does not have any parameters.
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | Token is valid. |  -  |
-|**401** | Unauthorized. Invalid, expired, or missing authentication token. |  -  |
+|**401** | Unauthorized. Invalid, expired, or missing authentication token |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

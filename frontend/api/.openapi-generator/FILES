@@ -14,6 +14,8 @@ docs/Error.md
 docs/LoginRequest.md
 docs/LoginResponse.md
 docs/Logout200Response.md
+docs/RefreshRequest.md
+docs/RefreshResponse.md
 docs/RegisterRequest.md
 docs/RegisterResponse.md
 docs/Token.md

@@ -141,6 +141,38 @@ export interface ModelError {
 /**
  * 
  * @export
+ * @interface RefreshRequest
+ */
+export interface RefreshRequest {
+    /**
+     * 
+     * @type {string}
+     * @memberof RefreshRequest
+     */
+    'refresh_token': string;
+}
+/**
+ * 
+ * @export
+ * @interface RefreshResponse
+ */
+export interface RefreshResponse {
+    /**
+     * JWT token
+     * @type {string}
+     * @memberof RefreshResponse
+     */
+    'token': string;
+    /**
+     * Refresh token
+     * @type {string}
+     * @memberof RefreshResponse
+     */
+    'refresh_token': string;
+}
+/**
+ * 
+ * @export
  * @interface RegisterRequest
  */
 export interface RegisterRequest {
@@ -311,6 +343,42 @@ export const AuthenticationApiAxiosParamCreator = function (configuration?: Conf
         },
         /**
          * 
+         * @summary Refresh access and refresh tokens
+         * @param {RefreshRequest} refreshRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        refreshTokens: async (refreshRequest: RefreshRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'refreshRequest' is not null or undefined
+            assertParamExists('refreshTokens', 'refreshRequest', refreshRequest)
+            const localVarPath = `/api/auth/refresh`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(refreshRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
          * @summary Register a new user
          * @param {RegisterRequest} registerRequest 
          * @param {*} [options] Override http request option.
@@ -429,6 +497,19 @@ export const AuthenticationApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
+         * @summary Refresh access and refresh tokens
+         * @param {RefreshRequest} refreshRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async refreshTokens(refreshRequest: RefreshRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<RefreshResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.refreshTokens(refreshRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['AuthenticationApi.refreshTokens']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
          * @summary Register a new user
          * @param {RegisterRequest} registerRequest 
          * @param {*} [options] Override http request option.
@@ -493,6 +574,16 @@ export const AuthenticationApiFactory = function (configuration?: Configuration,
         },
         /**
          * 
+         * @summary Refresh access and refresh tokens
+         * @param {RefreshRequest} refreshRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        refreshTokens(refreshRequest: RefreshRequest, options?: RawAxiosRequestConfig): AxiosPromise<RefreshResponse> {
+            return localVarFp.refreshTokens(refreshRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
          * @summary Register a new user
          * @param {RegisterRequest} registerRequest 
          * @param {*} [options] Override http request option.
@@ -553,6 +644,18 @@ export class AuthenticationApi extends BaseAPI {
      */
     public logout(options?: RawAxiosRequestConfig) {
         return AuthenticationApiFp(this.configuration).logout(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Refresh access and refresh tokens
+     * @param {RefreshRequest} refreshRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof AuthenticationApi
+     */
+    public refreshTokens(refreshRequest: RefreshRequest, options?: RawAxiosRequestConfig) {
+        return AuthenticationApiFp(this.configuration).refreshTokens(refreshRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

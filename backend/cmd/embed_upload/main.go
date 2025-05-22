@@ -15,13 +15,13 @@ import (
 )
 
 type RagDocument struct {
-	Text     string                 `json:"text"`
-	Metadata map[string]interface{} `json:"metadata"`
+	Text     string         `json:"text"`
+	Metadata map[string]any `json:"metadata"`
 }
 
 // cleanMetadata removes or replaces nil values from the metadata map.
-func cleanMetadata(metadata map[string]interface{}) map[string]interface{} {
-	cleaned := make(map[string]interface{})
+func cleanMetadata(metadata map[string]any) map[string]interface{} {
+	cleaned := make(map[string]any)
 	for key, value := range metadata {
 		if value == nil {
 			// Option 1: Skip nil values (remove the key)
@@ -64,14 +64,14 @@ func main() {
 	}()
 
 	// For testing, consider deleting the collection first if you're making changes
-	// existingCollection, _ := chromaClient.GetCollection(ctx, chromaCollectionName, nil)
-	// if existingCollection != nil {
-	// 	log.Printf("Deleting existing collection '%s' for a clean test run.", chromaCollectionName)
-	// 	_, errDel := chromaClient.DeleteCollection(ctx, chromaCollectionName)
-	// 	if errDel != nil {
-	// 		log.Fatalf("Failed to delete existing collection '%s': %v", chromaCollectionName, errDel)
-	// 	}
-	// }
+	existingCollection, _ := chromaClient.GetCollection(ctx, chromaCollectionName, nil)
+	if existingCollection != nil {
+		log.Printf("Deleting existing collection '%s' for a clean test run.", chromaCollectionName)
+		errDel := chromaClient.DeleteCollection(ctx, chromaCollectionName)
+		if errDel != nil {
+			log.Fatalf("Failed to delete existing collection '%s': %v", chromaCollectionName, errDel)
+		}
+	}
 
 	collection, err := chromaClient.GetOrCreateCollection(ctx, chromaCollectionName, chromago.WithEmbeddingFunctionCreate(ef))
 	if err != nil {
@@ -86,7 +86,7 @@ func main() {
 
 	var docIDs []chromago.DocumentID
 	var documents []string
-	var metadatasFromJSONL []map[string]interface{}
+	var metadatasFromJSONL []map[string]any
 
 	scanner := bufio.NewScanner(file)
 	lineNumber := 0
@@ -114,7 +114,7 @@ func main() {
 		documents = append(documents, ragDoc.Text)
 
 		if ragDoc.Metadata == nil {
-			ragDoc.Metadata = make(map[string]interface{})
+			ragDoc.Metadata = make(map[string]any)
 		} else {
 			// Clean the metadata to handle nil values
 			ragDoc.Metadata = cleanMetadata(ragDoc.Metadata)
@@ -148,10 +148,7 @@ func main() {
 	totalDocs := len(documents)
 
 	for i := 0; i < totalDocs; i += batchSize {
-		end := i + batchSize
-		if end > totalDocs {
-			end = totalDocs
-		}
+		end := min(i+batchSize, totalDocs)
 
 		batchDocIDs := docIDs[i:end]
 		batchDocuments := documents[i:end]

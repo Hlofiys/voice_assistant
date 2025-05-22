@@ -55,7 +55,7 @@ func LoadConfig(path string) (config Config, err error) {
 		config.DbDriver = "postgres"
 	}
 	if config.DbSource == "" {
-		config.DbSource = "postgresql://postgres:postgres@db:5432/assistant?sslmode=disable"
+		config.DbSource = "postgresql://postgres:postgres@postgres:5432/assistant?sslmode=disable"
 	}
 	if config.PostgresUser == "" {
 		config.PostgresUser = "postgres"

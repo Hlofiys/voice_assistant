@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: assistant
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -17,7 +17,7 @@ services:
     image: chromadb/chroma:latest
     restart: always
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       - IS_PERSISTENT=TRUE
 
@@ -34,7 +34,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: assistant
       SERVER_ADDRESS: 0.0.0.0:8080
-      CHROMA_BASE_URL: http://chromadb:8000
+      CHROMA_BASE_URL: http://chromadb:8001
       CHROMA_COLLECTION_NAME: chatbot-collection
       GOOGLE_EMBEDDING_MODEL_NAME: text-embedding-004
       GOOGLE_CHAT_MODEL_NAME: gemini-2.0-flash-lite
@@ -42,7 +42,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       
     ports:
-      - "8080:8080"
+      - "8082:8080"
     volumes:
       - ./backend:/app
 

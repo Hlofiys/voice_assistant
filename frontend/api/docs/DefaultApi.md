@@ -1,6 +1,6 @@
 # DefaultApi
 
-All URIs are relative to *http://localhost*
+All URIs are relative to *https://assistant.hlofiys.xyz*
 
 |Method | HTTP request | Description|
 |------------- | ------------- | -------------|

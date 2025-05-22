@@ -4,6 +4,10 @@ info:
   version: 1.0.0
   description: API for voice assistant backend
 
+servers:
+  - url: https://assistant.hlofiys.xyz
+    description: Production server
+
 components:
   securitySchemes:
     BearerAuth:

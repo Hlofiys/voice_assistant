@@ -364,6 +364,18 @@ func (s *Server) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	_, err = s.db.GetUserAuthDetailsByEmail(r.Context(), registerRequest.Email)
+	if err == nil {
+		http.Error(w, `{"message": "user with this email already exists"}`, http.StatusConflict) 
+		log.Printf("[Register] Attempt to register with existing email: %s", registerRequest.Email)
+		return
+	}
+	if err != sql.ErrNoRows && err != pgx.ErrNoRows {
+		http.Error(w, `{"message": "failed to check email availability"}`, http.StatusInternalServerError)
+		log.Printf("[Register] Error checking email availability for %s: %v", registerRequest.Email, err)
+		return
+	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(registerRequest.Password), bcrypt.DefaultCost)
 	if err != nil {
 		http.Error(w, `{"message": "failed to hash password"}`, http.StatusInternalServerError)

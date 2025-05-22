@@ -24,7 +24,7 @@ WORKDIR /app
 COPY --from=build /app/voice_assistant .
 COPY --from=build /app/api.yaml .
 COPY --from=build /app/config.yaml .
-COPY --from=build /app/db/migration .
+COPY --from=build /app/db/migration ./db/migration
 
 # Set the timezone and install CA certificates
 RUN apk --no-cache add ca-certificates tzdata

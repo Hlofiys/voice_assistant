@@ -18,7 +18,7 @@ type Config struct {
 	JwtSecret                string `mapstructure:"JWT_SECRET"`
 	JwtIssuer                string `mapstructure:"JWT_ISSUER"`
 	JwtAudience              string `mapstructure:"JWT_AUDIENCE"`
-	GoogleAPIKey             string `mapstructure:"GOOGLE_API_KEY"`
+	GoogleAPIKey             string `mapstructure:"GEMINI_API_KEY"`
 	ChromaBaseURL            string `mapstructure:"CHROMA_BASE_URL"`
 	ChromaCollectionName     string `mapstructure:"CHROMA_COLLECTION_NAME"`
 	GoogleEmbeddingModelName string `mapstructure:"GOOGLE_EMBEDDING_MODEL_NAME"`
@@ -48,7 +48,7 @@ func LoadConfig(path string) (config Config, err error) {
 
 	// Always load sensitive fields from environment variables
 	config.JwtSecret = viper.GetString("JWT_SECRET")
-	config.GoogleAPIKey = viper.GetString("GOOGLE_API_KEY")
+	config.GoogleAPIKey = viper.GetString("GEMINI_API_KEY")
 
 	return
 }

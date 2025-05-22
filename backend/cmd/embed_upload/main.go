@@ -52,7 +52,7 @@ func main() {
 		log.Fatalf("Failed to create Gemini embedding function: %v", err)
 	}
 
-	chromaClient, err := chromago.NewHTTPClient(chromago.WithBaseURL("http://localhost:8000"))
+	chromaClient, err := chromago.NewHTTPClient(chromago.WithBaseURL("http://192.168.1.34:8001"))
 	if err != nil {
 		log.Fatalf("Failed to create Chroma client: %v", err)
 	}
@@ -63,15 +63,15 @@ func main() {
 		}
 	}()
 
-	// For testing, consider deleting the collection first if you're making changes
-	existingCollection, _ := chromaClient.GetCollection(ctx, chromaCollectionName, nil)
-	if existingCollection != nil {
-		log.Printf("Deleting existing collection '%s' for a clean test run.", chromaCollectionName)
-		errDel := chromaClient.DeleteCollection(ctx, chromaCollectionName)
-		if errDel != nil {
-			log.Fatalf("Failed to delete existing collection '%s': %v", chromaCollectionName, errDel)
-		}
-	}
+	// 	// For testing, consider deleting the collection first if you're making changes
+	// existingCollection, _ := chromaClient.GetCollection(ctx, chromaCollectionName, nil)
+	// if existingCollection != nil {
+	// 	log.Printf("Deleting existing collection '%s' for a clean test run.", chromaCollectionName)
+	// 	errDel := chromaClient.DeleteCollection(ctx, chromaCollectionName)
+	// 	if errDel != nil {
+	// 		log.Fatalf("Failed to delete existing collection '%s': %v", chromaCollectionName, errDel)
+	// 	}
+	// }
 
 	collection, err := chromaClient.GetOrCreateCollection(ctx, chromaCollectionName, chromago.WithEmbeddingFunctionCreate(ef))
 	if err != nil {

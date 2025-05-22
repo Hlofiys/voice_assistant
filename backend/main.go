@@ -19,9 +19,11 @@ import (
 	chromago "github.com/amikos-tech/chroma-go/pkg/api/v2"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
+	genaiembs "github.com/google/generative-ai-go/genai"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	middleWare "github.com/oapi-codegen/nethttp-middleware"
+	"google.golang.org/api/option"
 	"google.golang.org/genai"
 )
 
@@ -99,9 +101,10 @@ func main() {
 
 	// Establish database connection
 	ctx := context.Background()
+	geminiBaseURL := "https://google-proxy.hlofiys.xyz/"
 
 	httpOptions := genai.HTTPOptions{
-		BaseURL: "https://google-proxy.hlofiys.xyz/",
+		BaseURL: geminiBaseURL,
 	}
 
 	// Create GenAI client
@@ -109,6 +112,15 @@ func main() {
 		APIKey:      config.GoogleAPIKey,
 		HTTPOptions: httpOptions,
 	})
+	if err != nil {
+		log.Fatalf("Failed to create GenAI client: %v", err)
+	}
+
+	// Create GenAIEmbs client
+	genaiClientEmbs, err := genaiembs.NewClient(ctx,
+		option.WithAPIKey(config.GoogleAPIKey),
+		option.WithEndpoint(geminiBaseURL),
+	)
 	if err != nil {
 		log.Fatalf("Failed to create GenAI client: %v", err)
 	}
@@ -126,7 +138,7 @@ func main() {
 		}
 	}()
 
-	server := api.NewServer(*authenticator, genaiClient, chromaClient, config.ChromaCollectionName, db)
+	server := api.NewServer(*authenticator, genaiClient, genaiClientEmbs, chromaClient, config.ChromaCollectionName, db)
 
 	openapi3filter.RegisterBodyDecoder("audio/mp4", openapi3filter.FileBodyDecoder)
 	validator := middleWare.OapiRequestValidatorWithOptions(doc, validatorOptions)

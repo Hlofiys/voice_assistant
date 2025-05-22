@@ -16,6 +16,7 @@ import (
 
 	chromago "github.com/amikos-tech/chroma-go/pkg/api/v2"
 	g "github.com/amikos-tech/chroma-go/pkg/embeddings/gemini"
+	genaiembs "github.com/google/generative-ai-go/genai"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -27,7 +28,8 @@ var _ ServerInterface = (*Server)(nil)
 
 type Server struct {
 	jwtAuth              tools.Authenticator
-	genaiClient          *genai.Client // Client from google.golang.org/genai
+	genaiClient          *genai.Client
+	genaiClientEmbs      *genaiembs.Client
 	embedModel           string
 	chatModel            string
 	chromaDBClient       chromago.Client
@@ -36,12 +38,12 @@ type Server struct {
 	db                   *db.Queries
 }
 
-func NewServer(jwtAuth tools.Authenticator, client *genai.Client, chromaDBClient chromago.Client, chromaCollection string, db *db.Queries) Server {
+func NewServer(jwtAuth tools.Authenticator, client *genai.Client, clientEmbs *genaiembs.Client, chromaDBClient chromago.Client, chromaCollection string, db *db.Queries) Server {
 	embedModelName := "text-embedding-004"
 
 	chatModelName := "gemini-2.0-flash-lite"
 
-	ef, err := g.NewGeminiEmbeddingFunction(g.WithEnvAPIKey(), g.WithDefaultModel("text-embedding-004"))
+	ef, err := g.NewGeminiEmbeddingFunction(g.WithEnvAPIKey(), g.WithDefaultModel("text-embedding-004"), g.WithClient(clientEmbs))
 	if err != nil {
 		fmt.Printf("Error creating Gemini embedding function: %s \n", err)
 	}

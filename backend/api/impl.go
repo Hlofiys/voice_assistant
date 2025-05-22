@@ -2,23 +2,23 @@ package api
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"time"
-	"database/sql"
 	"math/big"
 	"net/http"
 	"strings"
+	"time"
 	db "voice_assistant/db/sqlc"
 	"voice_assistant/tools"
 
 	chromago "github.com/amikos-tech/chroma-go/pkg/api/v2"
 	g "github.com/amikos-tech/chroma-go/pkg/embeddings/gemini"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/genai"
 )
@@ -135,9 +135,9 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var loginRequest * LoginRequest
+	var loginRequest *LoginRequest
 
-	err = json.Unmarshal(bodyBytes,&loginRequest)
+	err = json.Unmarshal(bodyBytes, &loginRequest)
 	if err != nil {
 		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
 		log.Printf("[Login] Error unmarshalling request body: %v", err)
@@ -170,7 +170,7 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 
 	pgDbUserID, err := s.db.GetUserByEmailAndPassword(r.Context(), db.GetUserByEmailAndPasswordParams{
 		Email:    loginRequest.Email,
-		Password: hashedPasswordFromDB, 
+		Password: hashedPasswordFromDB,
 	})
 	if err != nil {
 		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
@@ -193,11 +193,11 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 	updateTokenParams := db.UpdateRefreshTokenParams{
 		RefreshToken: pgtype.Text{String: refreshTokenString, Valid: true},
 		ExpiredAt:    pgtype.Timestamp{Time: refreshTokenExpiresAt, Valid: true},
-		UserID:       pgDbUserID, 
+		UserID:       pgDbUserID,
 	}
 	err = s.db.UpdateRefreshToken(r.Context(), updateTokenParams)
 	if err != nil {
-		log.Printf("[Login] Failed to update refresh token for user %s (ID: %s): %v", loginRequest.Email, pgDbUserID.Bytes, err) 
+		log.Printf("[Login] Failed to update refresh token for user %s (ID: %s): %v", loginRequest.Email, pgDbUserID.Bytes, err)
 		http.Error(w, `{"message": "failed to save session"}`, http.StatusInternalServerError)
 		return
 	}
@@ -229,7 +229,7 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (s *Server) ValidateRefreshToken (w http.ResponseWriter, r *http.Request){
+func (s *Server) ValidateRefreshToken(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, err := io.ReadAll(r.Body)
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
@@ -238,8 +238,8 @@ func (s *Server) ValidateRefreshToken (w http.ResponseWriter, r *http.Request){
 		return
 	}
 
-	var refreshTokenValidateRequest * RefreshTokenValidateRequest
-	err = json.Unmarshal(bodyBytes,&refreshTokenValidateRequest)
+	var refreshTokenValidateRequest *RefreshTokenValidateRequest
+	err = json.Unmarshal(bodyBytes, &refreshTokenValidateRequest)
 
 	if err != nil {
 		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
@@ -266,12 +266,12 @@ func (s *Server) ValidateRefreshToken (w http.ResponseWriter, r *http.Request){
 
 	w.Header().Set("Content-Type", "application/json")
 
-	if !updated { 
+	if !updated {
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(map[string]string{"message": "Token is valid"}); err != nil {
 			log.Printf("[ValidateRefreshToken] Error encoding 'Token is valid' response: %v", err)
 		}
-	} else { 
+	} else {
 		w.WriteHeader(http.StatusUnauthorized)
 		if err := json.NewEncoder(w).Encode(map[string]string{"message": "Token is invalid"}); err != nil {
 			log.Printf("[ValidateRefreshToken] Error encoding 'Token is invalid' response: %v", err)
@@ -495,6 +495,8 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 			ragContextBuilder.WriteString(fmt.Sprintf("%d. %s\n", i+1, doc))
 		}
 	}
+
+	log.Printf("Relevant context retrieved: %s", ragContextBuilder.String())
 
 	finalPromptString := fmt.Sprintf("Вопрос пользователя: \"%s\"\n\n%s\nОтветьте на вопрос пользователя, используя предоставленный контекст.",
 		userQuery, ragContextBuilder.String())

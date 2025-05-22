@@ -42,7 +42,7 @@ services:
       POSTGRES_DB: assistant
       SERVER_ADDRESS: 0.0.0.0:8080
       CHROMA_BASE_URL: http://chromadb:8000
-      CHROMA_COLLECTION_NAME: chatbot-collection
+      CHROMA_COLLECTION_NAME: chatbot-pharmacies
       GOOGLE_EMBEDDING_MODEL_NAME: text-embedding-004
       GOOGLE_CHAT_MODEL_NAME: gemini-2.0-flash-lite
       GEMINI_API_KEY: ${GEMINI_API_KEY}

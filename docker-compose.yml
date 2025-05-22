@@ -51,7 +51,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - voice_assistant_bridge
+      - voice_assistant_network
 
 volumes:
   postgres_data:

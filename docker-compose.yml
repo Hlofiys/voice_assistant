@@ -1,5 +1,9 @@
 version: "3.8"
 
+networks:
+  voice_assistant_network:
+    driver: bridge
+
 services:
   postgres:
     image: postgres:alpine
@@ -12,6 +16,8 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - voice_assistant_network
 
   chromadb:
     image: chromadb/chroma:latest
@@ -20,6 +26,8 @@ services:
       - "8001:8000"
     environment:
       - IS_PERSISTENT=TRUE
+    networks:
+      - voice_assistant_network
 
   backend:
     image: hlofiys/voice-assistant-backend:main
@@ -42,6 +50,8 @@ services:
       
     ports:
       - "8082:8080"
+    networks:
+      - voice_assistant_bridge
 
 volumes:
   postgres_data:

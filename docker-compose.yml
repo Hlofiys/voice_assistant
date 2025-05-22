@@ -45,7 +45,7 @@ services:
       CHROMA_COLLECTION_NAME: chatbot-collection
       GOOGLE_EMBEDDING_MODEL_NAME: text-embedding-004
       GOOGLE_CHAT_MODEL_NAME: gemini-2.0-flash-lite
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
       
     ports:

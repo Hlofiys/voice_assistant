@@ -2,23 +2,23 @@ package api
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"time"
-	"database/sql"
 	"math/big"
 	"net/http"
 	"strings"
+	"time"
 	db "voice_assistant/db/sqlc"
 	"voice_assistant/tools"
 
 	chromago "github.com/amikos-tech/chroma-go/pkg/api/v2"
 	g "github.com/amikos-tech/chroma-go/pkg/embeddings/gemini"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/genai"
 )
@@ -135,9 +135,9 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var loginRequest * LoginRequest
+	var loginRequest *LoginRequest
 
-	err = json.Unmarshal(bodyBytes,&loginRequest)
+	err = json.Unmarshal(bodyBytes, &loginRequest)
 	if err != nil {
 		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
 		log.Printf("[Login] Error unmarshalling request body: %v", err)
@@ -151,22 +151,22 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 
 	userDetails, err := s.db.GetUserAuthDetailsByEmail(r.Context(), loginRequest.Email)
 
-    if err != nil {
-        if err == sql.ErrNoRows || err == pgx.ErrNoRows {
-            log.Printf("[Login] User not found for email: %s", loginRequest.Email)
-            http.Error(w, `{"message": "invalid email or password"}`, http.StatusUnauthorized)
-            return
-        }
-        log.Printf("[Login] Database error fetching user details for email %s: %v", loginRequest.Email, err)
-        http.Error(w, `{"message": "internal server error while fetching user data"}`, http.StatusInternalServerError)
-        return
-    }
+	if err != nil {
+		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+			log.Printf("[Login] User not found for email: %s", loginRequest.Email)
+			http.Error(w, `{"message": "invalid email or password"}`, http.StatusUnauthorized)
+			return
+		}
+		log.Printf("[Login] Database error fetching user details for email %s: %v", loginRequest.Email, err)
+		http.Error(w, `{"message": "internal server error while fetching user data"}`, http.StatusInternalServerError)
+		return
+	}
 
 	if userDetails.Code.Valid && userDetails.Code.String != "" {
-        log.Printf("[Login] User email not verified for: %s. Code: '%s'", loginRequest.Email, userDetails.Code.String)
-        http.Error(w, `{"message": "Please verify your email address before logging in."}`, http.StatusBadRequest) 
-        return
-    }
+		log.Printf("[Login] User email not verified for: %s. Code: '%s'", loginRequest.Email, userDetails.Code.String)
+		http.Error(w, `{"message": "Please verify your email address before logging in."}`, http.StatusBadRequest)
+		return
+	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(userDetails.Password), []byte(loginRequest.Password))
 	if err != nil {
@@ -185,11 +185,11 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 	updateTokenParams := db.UpdateRefreshTokenParams{
 		RefreshToken: pgtype.Text{String: refreshTokenString, Valid: true},
 		ExpiredAt:    pgtype.Timestamp{Time: refreshTokenExpiresAt, Valid: true},
-		UserID:       userDetails.UserID, 
+		UserID:       userDetails.UserID,
 	}
 	err = s.db.UpdateRefreshToken(r.Context(), updateTokenParams)
 	if err != nil {
-		log.Printf("[Login] Failed to update refresh token for user %s (ID: %s): %v", loginRequest.Email, userDetails.UserID.Bytes, err) 
+		log.Printf("[Login] Failed to update refresh token for user %s (ID: %s): %v", loginRequest.Email, userDetails.UserID.Bytes, err)
 		http.Error(w, `{"message": "failed to save session"}`, http.StatusInternalServerError)
 		return
 	}
@@ -221,7 +221,7 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (s *Server) RefreshTokens (w http.ResponseWriter, r *http.Request){
+func (s *Server) RefreshTokens(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, err := io.ReadAll(r.Body)
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
@@ -230,8 +230,8 @@ func (s *Server) RefreshTokens (w http.ResponseWriter, r *http.Request){
 		return
 	}
 
-	var refreshRequest * RefreshRequest
-	err = json.Unmarshal(bodyBytes,&refreshRequest)
+	var refreshRequest *RefreshRequest
+	err = json.Unmarshal(bodyBytes, &refreshRequest)
 
 	if err != nil {
 		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
@@ -252,7 +252,7 @@ func (s *Server) RefreshTokens (w http.ResponseWriter, r *http.Request){
 	pgDbUserID, err := s.db.VerifyRefreshToken(r.Context(), params)
 
 	if err != nil {
-		if err == pgx.ErrNoRows { 
+		if err == pgx.ErrNoRows {
 			log.Printf("[RefreshTokens] Invalid or expired refresh token: %s", refreshRequest.RefreshToken)
 			http.Error(w, `{"message": "invalid or expired refresh token"}`, http.StatusUnauthorized)
 			return
@@ -286,7 +286,7 @@ func (s *Server) RefreshTokens (w http.ResponseWriter, r *http.Request){
 	updateTokenParams := db.UpdateRefreshTokenParams{
 		RefreshToken: pgtype.Text{String: newRefreshTokenString, Valid: true},
 		ExpiredAt:    pgtype.Timestamp{Time: newRefreshTokenExpiresAt, Valid: true},
-		UserID:       pgDbUserID, 
+		UserID:       pgDbUserID,
 	}
 
 	err = s.db.UpdateRefreshToken(r.Context(), updateTokenParams)
@@ -525,6 +525,8 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 			ragContextBuilder.WriteString(fmt.Sprintf("%d. %s\n", i+1, doc))
 		}
 	}
+
+	log.Printf("Relevant context retrieved: %s", ragContextBuilder.String())
 
 	finalPromptString := fmt.Sprintf("Вопрос пользователя: \"%s\"\n\n%s\nОтветьте на вопрос пользователя, используя предоставленный контекст.",
 		userQuery, ragContextBuilder.String())

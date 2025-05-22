@@ -28,18 +28,17 @@ type Config struct {
 // LoadConfig reads configuration from file or environment variables.
 func LoadConfig(path string) (config Config, err error) {
 	viper.AddConfigPath(path)
-	viper.SetConfigName("app") // Name of config file (without extension)
-	viper.SetConfigType("env") // REQUIRED if the config file does not have the extension in the name
+	viper.SetConfigName("config") // Name of config file (without extension)
+	viper.SetConfigType("yaml")
 
 	viper.AutomaticEnv() // Read in environment variables that match
 
-	err = viper.ReadInConfig() // Find and read the config file
-	if err != nil {
-		// If config file not found, it's okay if all vars are in ENV
+	// Read config file if present
+	if err = viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return
 		}
-		log.Println("Config file not found, relying on environment variables.")
+		log.Println("Config file not found, relying on environment variables and defaults.")
 	}
 
 	err = viper.Unmarshal(&config)
@@ -47,43 +46,9 @@ func LoadConfig(path string) (config Config, err error) {
 		return
 	}
 
-	// Set defaults if not provided, for critical fields or for easier local dev
-	if config.ServerAddress == "" {
-		config.ServerAddress = "8080" // Default port
-	}
-	if config.DbDriver == "" {
-		config.DbDriver = "postgres"
-	}
-	if config.DbSource == "" {
-		config.DbSource = "postgresql://postgres:postgres@postgres:5432/assistant?sslmode=disable"
-	}
-	if config.PostgresUser == "" {
-		config.PostgresUser = "postgres"
-	}
-	if config.PostgresPassword == "" {
-		config.PostgresPassword = "postgres"
-	}
-	if config.PostgresDb == "" {
-		config.PostgresDb = "assistant"
-	}
-	if config.JwtIssuer == "" {
-		config.JwtIssuer = "assistant-auth-api"
-	}
-	if config.JwtAudience == "" {
-		config.JwtAudience = "assistant-client"
-	}
-	if config.ChromaBaseURL == "" {
-		config.ChromaBaseURL = "http://chromadb:8000"
-	}
-	if config.ChromaCollectionName == "" {
-		config.ChromaCollectionName = "chatbot-collection"
-	}
-	if config.GoogleEmbeddingModelName == "" {
-		config.GoogleEmbeddingModelName = "text-embedding-004"
-	}
-	if config.GoogleChatModelName == "" {
-		config.GoogleChatModelName = "gemini-2.0-flash-lite"
-	}
+	// Always load sensitive fields from environment variables
+	config.JwtSecret = viper.GetString("JWT_SECRET")
+	config.GoogleAPIKey = viper.GetString("GOOGLE_API_KEY")
 
 	return
 }

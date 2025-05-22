@@ -149,37 +149,29 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hashedPasswordFromDB, err := s.db.GetPasswordByEmail(r.Context(), loginRequest.Email)
-	if err != nil {
-		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
-			log.Printf("[Login] User not found for email: %s", loginRequest.Email)
-			http.Error(w, `{"message": "invalid email or password"}`, http.StatusUnauthorized)
-			return
-		}
-		log.Printf("[Login] Database error fetching password for email %s: %v", loginRequest.Email, err)
-		http.Error(w, `{"message": "internal server error while fetching user data"}`, http.StatusInternalServerError)
-		return
-	}
+	userDetails, err := s.db.GetUserAuthDetailsByEmail(r.Context(), loginRequest.Email)
 
-	err = bcrypt.CompareHashAndPassword([]byte(hashedPasswordFromDB), []byte(loginRequest.Password))
+    if err != nil {
+        if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+            log.Printf("[Login] User not found for email: %s", loginRequest.Email)
+            http.Error(w, `{"message": "invalid email or password"}`, http.StatusUnauthorized)
+            return
+        }
+        log.Printf("[Login] Database error fetching user details for email %s: %v", loginRequest.Email, err)
+        http.Error(w, `{"message": "internal server error while fetching user data"}`, http.StatusInternalServerError)
+        return
+    }
+
+	if userDetails.Code.Valid && userDetails.Code.String != "" {
+        log.Printf("[Login] User email not verified for: %s. Code: '%s'", loginRequest.Email, userDetails.Code.String)
+        http.Error(w, `{"message": "Please verify your email address before logging in."}`, http.StatusBadRequest) 
+        return
+    }
+
+	err = bcrypt.CompareHashAndPassword([]byte(userDetails.Password), []byte(loginRequest.Password))
 	if err != nil {
 		log.Printf("[Login] Invalid password for email: %s", loginRequest.Email)
 		http.Error(w, `{"message": "invalid email or password"}`, http.StatusUnauthorized)
-		return
-	}
-
-	pgDbUserID, err := s.db.GetUserByEmailAndPassword(r.Context(), db.GetUserByEmailAndPasswordParams{
-		Email:    loginRequest.Email,
-		Password: hashedPasswordFromDB, 
-	})
-	if err != nil {
-		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
-			log.Printf("[Login] User disappeared after password check for email: %s", loginRequest.Email)
-			http.Error(w, `{"message": "internal server error - inconsistent user data"}`, http.StatusInternalServerError)
-			return
-		}
-		log.Printf("[Login] Database error fetching user_id for email %s: %v", loginRequest.Email, err)
-		http.Error(w, `{"message": "internal server error while fetching user id"}`, http.StatusInternalServerError)
 		return
 	}
 
@@ -193,16 +185,16 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 	updateTokenParams := db.UpdateRefreshTokenParams{
 		RefreshToken: pgtype.Text{String: refreshTokenString, Valid: true},
 		ExpiredAt:    pgtype.Timestamp{Time: refreshTokenExpiresAt, Valid: true},
-		UserID:       pgDbUserID, 
+		UserID:       userDetails.UserID, 
 	}
 	err = s.db.UpdateRefreshToken(r.Context(), updateTokenParams)
 	if err != nil {
-		log.Printf("[Login] Failed to update refresh token for user %s (ID: %s): %v", loginRequest.Email, pgDbUserID.Bytes, err) 
+		log.Printf("[Login] Failed to update refresh token for user %s (ID: %s): %v", loginRequest.Email, userDetails.UserID.Bytes, err) 
 		http.Error(w, `{"message": "failed to save session"}`, http.StatusInternalServerError)
 		return
 	}
 
-	appUserID, err := uuid.FromBytes(pgDbUserID.Bytes[:])
+	appUserID, err := uuid.FromBytes(userDetails.UserID.Bytes[:])
 	if err != nil {
 		http.Error(w, `{"message": "internal server error - user ID conversion failed"}`, http.StatusInternalServerError)
 		log.Printf("[Login] Error converting user ID for %s: %v", loginRequest.Email, err)
@@ -229,7 +221,7 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (s *Server) ValidateRefreshToken (w http.ResponseWriter, r *http.Request){
+func (s *Server) RefreshTokens (w http.ResponseWriter, r *http.Request){
 	bodyBytes, err := io.ReadAll(r.Body)
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
@@ -238,8 +230,8 @@ func (s *Server) ValidateRefreshToken (w http.ResponseWriter, r *http.Request){
 		return
 	}
 
-	var refreshTokenValidateRequest * RefreshTokenValidateRequest
-	err = json.Unmarshal(bodyBytes,&refreshTokenValidateRequest)
+	var refreshRequest * RefreshRequest
+	err = json.Unmarshal(bodyBytes,&refreshRequest)
 
 	if err != nil {
 		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
@@ -247,36 +239,74 @@ func (s *Server) ValidateRefreshToken (w http.ResponseWriter, r *http.Request){
 		return
 	}
 
-	if refreshTokenValidateRequest.RefreshToken == "" {
+	if refreshRequest.RefreshToken == "" {
 		http.Error(w, `{"message": "refresh token are required"}`, http.StatusBadRequest)
 		return
 	}
 
 	params := db.VerifyRefreshTokenParams{
-		RefreshToken: pgtype.Text{String: refreshTokenValidateRequest.RefreshToken, Valid: true},
+		RefreshToken: pgtype.Text{String: refreshRequest.RefreshToken, Valid: true},
 		ExpiredAt:    pgtype.Timestamp{Time: time.Now(), Valid: true},
 	}
 
-	updated, err := s.db.VerifyRefreshToken(r.Context(), params)
+	pgDbUserID, err := s.db.VerifyRefreshToken(r.Context(), params)
+
 	if err != nil {
-		log.Printf("[ValidateRefreshToken] Database error verifying refresh token: %v", err)
+		if err == pgx.ErrNoRows { 
+			log.Printf("[RefreshTokens] Invalid or expired refresh token: %s", refreshRequest.RefreshToken)
+			http.Error(w, `{"message": "invalid or expired refresh token"}`, http.StatusUnauthorized)
+			return
+		}
+		log.Printf("[RefreshTokens] Database error verifying refresh token: %v", err)
 		http.Error(w, `{"message": "internal server error while validating token"}`, http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-
-	if updated { 
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(map[string]string{"message": "Token is valid"}); err != nil {
-			log.Printf("[ValidateRefreshToken] Error encoding 'Token is valid' response: %v", err)
-		}
-	} else { 
-		w.WriteHeader(http.StatusUnauthorized)
-		if err := json.NewEncoder(w).Encode(map[string]string{"message": "Token is invalid"}); err != nil {
-			log.Printf("[ValidateRefreshToken] Error encoding 'Token is invalid' response: %v", err)
-		}
+	appUserID, err := uuid.FromBytes(pgDbUserID.Bytes[:])
+	if err != nil {
+		log.Printf("[RefreshTokens] Error converting user ID: %v", err)
+		http.Error(w, `{"message": "internal server error - user ID conversion failed"}`, http.StatusInternalServerError)
+		return
 	}
+
+	newAccessToken, err := s.jwtAuth.GenerateToken(appUserID)
+	if err != nil {
+		log.Printf("[RefreshTokens] Error generating new access token for user %s: %v", appUserID, err)
+		http.Error(w, `{"message": "failed to generate new access token"}`, http.StatusInternalServerError)
+		return
+	}
+
+	newRefreshTokenString, newRefreshTokenExpiresAt, err := s.jwtAuth.GenerateRefreshToken()
+	if err != nil {
+		log.Printf("[RefreshTokens] Error generating new refresh token for user %s: %v", appUserID, err)
+		http.Error(w, `{"message": "failed to generate new refresh token"}`, http.StatusInternalServerError)
+		return
+	}
+
+	updateTokenParams := db.UpdateRefreshTokenParams{
+		RefreshToken: pgtype.Text{String: newRefreshTokenString, Valid: true},
+		ExpiredAt:    pgtype.Timestamp{Time: newRefreshTokenExpiresAt, Valid: true},
+		UserID:       pgDbUserID, 
+	}
+
+	err = s.db.UpdateRefreshToken(r.Context(), updateTokenParams)
+	if err != nil {
+		log.Printf("[RefreshTokens] Failed to update new refresh token for user ID %s: %v", appUserID, err)
+		http.Error(w, `{"message": "failed to save new session"}`, http.StatusInternalServerError)
+		return
+	}
+
+	response := RefreshResponse{
+		Token:        newAccessToken,
+		RefreshToken: newRefreshTokenString,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("[RefreshTokens] Error encoding success response for user ID %s: %v", appUserID, err)
+	}
+
 }
 
 func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {

@@ -27,7 +27,7 @@ func NewJwsAuthenticator(config util.Config) (*Authenticator, error) {
 // GenerateToken creates a new JWT token with the given permissions and duration
 func (f *Authenticator) GenerateToken(userID uuid.UUID) (string, error) {
 	now := time.Now()
-	tokenDuration := time.Hour * 24
+	tokenDuration := time.Minute * 30
 	claims := jwt.MapClaims{
 		"sub": userID,
 		"exp": now.Add(tokenDuration).Unix(),

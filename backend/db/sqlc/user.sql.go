@@ -39,35 +39,23 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 	return err
 }
 
-const getPasswordByEmail = `-- name: GetPasswordByEmail :one
-SELECT password
+const getUserAuthDetailsByEmail = `-- name: GetUserAuthDetailsByEmail :one
+SELECT user_id, password, code
 FROM users
 WHERE email = $1
 `
 
-func (q *Queries) GetPasswordByEmail(ctx context.Context, email string) (string, error) {
-	row := q.db.QueryRow(ctx, getPasswordByEmail, email)
-	var password string
-	err := row.Scan(&password)
-	return password, err
+type GetUserAuthDetailsByEmailRow struct {
+	UserID   pgtype.UUID `json:"user_id"`
+	Password string      `json:"password"`
+	Code     pgtype.Text `json:"code"`
 }
 
-const getUserByEmailAndPassword = `-- name: GetUserByEmailAndPassword :one
-SELECT user_id
-FROM users
-WHERE email = $1 AND password = $2
-`
-
-type GetUserByEmailAndPasswordParams struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
-func (q *Queries) GetUserByEmailAndPassword(ctx context.Context, arg GetUserByEmailAndPasswordParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, getUserByEmailAndPassword, arg.Email, arg.Password)
-	var user_id pgtype.UUID
-	err := row.Scan(&user_id)
-	return user_id, err
+func (q *Queries) GetUserAuthDetailsByEmail(ctx context.Context, email string) (GetUserAuthDetailsByEmailRow, error) {
+	row := q.db.QueryRow(ctx, getUserAuthDetailsByEmail, email)
+	var i GetUserAuthDetailsByEmailRow
+	err := row.Scan(&i.UserID, &i.Password, &i.Code)
+	return i, err
 }
 
 const logoutById = `-- name: LogoutById :exec
@@ -125,15 +113,15 @@ func (q *Queries) UpdateRefreshToken(ctx context.Context, arg UpdateRefreshToken
 }
 
 const verifyRefreshToken = `-- name: VerifyRefreshToken :one
-WITH updated_rows AS (
+WITH updated_user AS (
     UPDATE users
     SET refresh_token = NULL, expired_at = NULL 
     WHERE refresh_token = $1 
       AND expired_at IS NOT NULL 
       AND $2 <= expired_at     
-    RETURNING 1
+    RETURNING user_id
 )
-SELECT EXISTS (SELECT 1 FROM updated_rows)
+SELECT user_id FROM updated_user
 `
 
 type VerifyRefreshTokenParams struct {
@@ -141,9 +129,9 @@ type VerifyRefreshTokenParams struct {
 	ExpiredAt    pgtype.Timestamp `json:"expired_at"`
 }
 
-func (q *Queries) VerifyRefreshToken(ctx context.Context, arg VerifyRefreshTokenParams) (bool, error) {
+func (q *Queries) VerifyRefreshToken(ctx context.Context, arg VerifyRefreshTokenParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, verifyRefreshToken, arg.RefreshToken, arg.ExpiredAt)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
+	var user_id pgtype.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
 }

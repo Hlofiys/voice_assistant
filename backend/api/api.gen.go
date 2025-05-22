@@ -59,9 +59,18 @@ type LoginResponse struct {
 	Token string `json:"token"`
 }
 
-// RefreshTokenValidateRequest defines model for RefreshTokenValidateRequest.
-type RefreshTokenValidateRequest struct {
+// RefreshRequest defines model for RefreshRequest.
+type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
+}
+
+// RefreshResponse defines model for RefreshResponse.
+type RefreshResponse struct {
+	// RefreshToken Refresh token
+	RefreshToken string `json:"refresh_token"`
+
+	// Token JWT token
+	Token string `json:"token"`
 }
 
 // RegisterRequest defines model for RegisterRequest.
@@ -92,8 +101,8 @@ type ConfirmEmailJSONRequestBody = ConfirmEmailRequest
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
-// ValidateRefreshTokenJSONRequestBody defines body for ValidateRefreshToken for application/json ContentType.
-type ValidateRefreshTokenJSONRequestBody = RefreshTokenValidateRequest
+// RefreshTokensJSONRequestBody defines body for RefreshTokens for application/json ContentType.
+type RefreshTokensJSONRequestBody = RefreshRequest
 
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
@@ -112,9 +121,9 @@ type ServerInterface interface {
 	// Log out current user
 	// (POST /api/auth/logout)
 	Logout(w http.ResponseWriter, r *http.Request)
-	// Checking the validity of the refresh token
-	// (POST /api/auth/refresh-token/validate)
-	ValidateRefreshToken(w http.ResponseWriter, r *http.Request)
+	// Refresh access and refresh tokens
+	// (POST /api/auth/refresh)
+	RefreshTokens(w http.ResponseWriter, r *http.Request)
 	// Register a new user
 	// (POST /api/auth/register)
 	Register(w http.ResponseWriter, r *http.Request)
@@ -183,11 +192,11 @@ func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request
 	handler.ServeHTTP(w, r)
 }
 
-// ValidateRefreshToken operation middleware
-func (siw *ServerInterfaceWrapper) ValidateRefreshToken(w http.ResponseWriter, r *http.Request) {
+// RefreshTokens operation middleware
+func (siw *ServerInterfaceWrapper) RefreshTokens(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ValidateRefreshToken(w, r)
+		siw.Handler.RefreshTokens(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -374,7 +383,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/api/auth/confirm-email", wrapper.ConfirmEmail)
 	m.HandleFunc("POST "+options.BaseURL+"/api/auth/login", wrapper.Login)
 	m.HandleFunc("POST "+options.BaseURL+"/api/auth/logout", wrapper.Logout)
-	m.HandleFunc("POST "+options.BaseURL+"/api/auth/refresh-token/validate", wrapper.ValidateRefreshToken)
+	m.HandleFunc("POST "+options.BaseURL+"/api/auth/refresh", wrapper.RefreshTokens)
 	m.HandleFunc("POST "+options.BaseURL+"/api/auth/register", wrapper.Register)
 	m.HandleFunc("GET "+options.BaseURL+"/api/auth/validate-token", wrapper.ValidateToken)
 	m.HandleFunc("POST "+options.BaseURL+"/api/chat", wrapper.Chat)
@@ -385,25 +394,25 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/+RYUW/bNhD+KwS3hw1Q7GTrXvyWFh2QYQ9Bm3YPQTAw4sliI5Hq8eTEK/zfhyMlK7It",
-	"R+nqJOieEotH8nj3fXcf+UWmrqycBUtezr5In+ZQqvDvG2czg+XbUpniHXyuwRN/rtBVgGQgGKVOA/+l",
-	"ZQVyJj2hsXO5SiTwtB0jq0QifK4Ngpazy8YsietcJa21u/4EKfE6fS985ayHbTcQMgSf/03uBix/0OBT",
-	"NBUZZ+VMvovDIg4n294OzPvjr4uhORvnaK36juw60FtEh9snKMF7NYeHI9Ya7lr7Tzc3djBXQylJZKW8",
-	"v3Wox+drPWOPG99BshpfLtjgoyqMVgSD8d06134vxuw+N54Anz+jnSdDSb2HX7hTZVVASCVPQ8UZEr5O",
-	"U/A+q4uJOC9AeRBpDumNWLoaRXBDkBMLQJMt40eVpq62NHkwo/tIcdGmo+/wN0LR9o6rRHpIazS0fM/V",
-	"NG73GhQCntaU86/r8Ot3h6WiuKlMYu3lleJo50BOVMkVL2xs5rZ9Pj0/E5lDsXAmBaG8N56UJXGt0huw",
-	"mhcyFBLyMVicri1Oz89kIheAPq50MjmeHHPQXAVWVUbO5K/hE+OD8nCSqarMVNWUT9NYm4/WMKxcRCnH",
-	"OST9TMtZr4TLGEPw9NrpZewglsCGaaqqCpOGidNP3tmuIfF/PyJkciZ/mHYda9q0q+muXrXqJ4ywhvAh",
-	"Ijgc5Zfj4wO50NAk+NBPVjAQTehA36NFseTIv/qGPsVes8OJM7vgaiawjRXv++rw+37wgAGqlIOo0C2M",
-	"Bh25P2UJIKwjkbnaanbpt6cJBQFaVQgPuAAU0Bgm0tdlqXDZIVjU7H6sVEprBO+ZW2ruuR4wt8FS4568",
-	"4iU6rhTcE4c5ElrmgcjRUwVPzIq+FNgR/mBwjwTPS4GTp9s3RdAMF1X4F4X1mBByYg4klOj1w7FIdzXt",
-	"hTqP/0fQjVAf7+9VVlG4+Ry0iDtvN/bNHr4Lp66mLaA+AWA+WA6rQ/MP6Ilo4eNQlMZ7Y+dC9dLRZOtZ",
-	"ISV0zZEVEQpc6DloPWkkZ5d9UXR5tbrawCFnS6Q1IlgKtXc0BhttfRRiMV00yn0Yk5227/T+garxvivF",
-	"AYrzCJ4EV4TxIsTp6+jRu7R1a33vxbzPzYscBG4Gwth1KF4mITuVw7cxtmJxFpw2tBQuC79x81Y+kofx",
-	"3jjMvPZmeTC29a/Qoxh2coDthxXQ0CX5ucjDrSUIXVUgKL0UcGc8vSyR0sZVKGHh9nG9oe0GR+sXgDns",
-	"aQldL3jKKjz5ujK8ucizapREwF3FPEseViuPUQZtZtbSYOeSI+CQ5mqPTn3Do/uqUlkXZCqFNM0clkda",
-	"kdqXdVVrEx5vsvbZ59pYPtHITB9SFxDc0e6nwhGdP3ohMnTl5hPU/0oAPA7FDC9xayjferb7yYPVIsAl",
-	"Cbcwzs7PvPvq3wAAAP//oE/9Aa8ZAAA=",
+	"H4sIAAAAAAAC/+RYQW/jNhP9KwN+36EFFDtptxffsostkKKHYDe7PQRBwYgjixuJ1A4pJ+7C/70YUrIj",
+	"W3KcNraD7SmxOCSHb96bGfKbSG1ZWYPGOzH5JlyaYynDv++syTSV70upiw/4tUbn+XNFtkLyGoNRahXy",
+	"Xz+vUEyE86TNVCwSgTytZ2SRCMKvtSZUYnLdmCVxnZuktba3XzD1vE7XC1dZ43DTDcKM0OV/enuHhj8o",
+	"dCnpymtrxER8iMMQh5NNbwfm/fbH1dCctXO0Vl1H+g70nsjS5glKdE5O8WnEWsO+tX+3U20GYzUUkkRU",
+	"0rl7S2r3eC1nbHHjOwhW48sgpBtH2b7xMzb8LsCbaueRjk/IlSdDsD6SHz7IsiowgMnTSDJG4Oo0Reey",
+	"uhjBZYHSIaQ5pncwtzVBcAO8hRmSzubxo0xTWxs/ehLTbZq+agPWdfiF4ri54yIRDtOatJ9/5GIQt3uL",
+	"kpDOa5/zr9vw61dLpfRxU5HE0sErxdGVA7n3lVjwwtpkdtPn88sLyCzBzOoUQTqnnZfGw61M79AoXkj7",
+	"EJDPweJ8aXF+eSESMUNycaWz0enolEGzFRpZaTERP4dPzA+fh5OMZaXHsvb5OI2l5WRJw8pGljLOIegX",
+	"Skw6FUhEDNH5t1bNYwE0Hk2YJquq0GmYOP7irFnVU/7v/4SZmIj/jVcFd9xU23FfqV10A+apxvAhMjgc",
+	"5afT0z250Mgk+NANVjCABjpUj2RRzBn5Ny/oUyyVPU5cmJkstAJqseJ93+x/308OKVDV5wgV2ZlWqKL2",
+	"x9zBgLEeMlsbxS79chgoPJKRBTikGRJgY5gIV5elpPmKwVCz+zFTSaUInWNtyanjfMDaRuMb98QNL7HS",
+	"SsElfVgjoeLvSRydpubAquh2Mj3wB4NHIjiuBM4Ot29KqJgusnCviusxIN7CFD1I6NTDXZlua7+V6jz+",
+	"L0m3Q/fx8VFmhcJOp6gg7rxZ2NdreB9Pbe03iHoAwnwyDKsl/ReqEbT0sQSldk6bKchOOJpoHZVSoGpG",
+	"FiIVONEzaJ3WSEyuu03R9c3iZo2HHC1IayI0PuTenTnY9NbDJGza/NAbuj3l3bW7z4Ez7/pFqCd28fTQ",
+	"gPWqepGD6+oqxxaIqCDQDnR07fWKaamW9toqQwBBGtU9jXuGdOJVb5t2Got9yaZ7691JN2d72H5YOEP3",
+	"2mNphqtB6E1lQSjVHPBBO/+6+ooWV5Bg8P556TwcVno8WV7ap9hDzM+N2dXyhWW/DcZVmyeCf6N/1lis",
+	"L3LUtiIBfKhYZ8nTDcZzinkbmWU1711yBzqkudzSWr7j0W1ZqawLrytJfpxZKk+U9HJb1GWtdHhvydqX",
+	"mltt+EQ7Rvplq/3a+xU++P7XvScp16Y2yMiW669G/6m6/zwWM73gXvt846XtB4dGQaBLEi5OHJ0feffF",
+	"3wEAAP//5ndm8yEaAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

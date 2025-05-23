@@ -11,6 +11,32 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const confirmEmailWithTokens = `-- name: ConfirmEmailWithTokens :one
+UPDATE users
+SET code = NULL, refresh_token = $3, expired_at = $4
+WHERE email = $1 AND code = $2
+RETURNING user_id
+`
+
+type ConfirmEmailWithTokensParams struct {
+	Email        string           `json:"email"`
+	Code         pgtype.Text      `json:"code"`
+	RefreshToken pgtype.Text      `json:"refresh_token"`
+	ExpiredAt    pgtype.Timestamp `json:"expired_at"`
+}
+
+func (q *Queries) ConfirmEmailWithTokens(ctx context.Context, arg ConfirmEmailWithTokensParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, confirmEmailWithTokens,
+		arg.Email,
+		arg.Code,
+		arg.RefreshToken,
+		arg.ExpiredAt,
+	)
+	var user_id pgtype.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const createUser = `-- name: CreateUser :exec
 INSERT INTO users (
     user_id,
@@ -58,6 +84,19 @@ func (q *Queries) GetUserAuthDetailsByEmail(ctx context.Context, email string) (
 	return i, err
 }
 
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT user_id
+FROM users
+WHERE email = $1
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var user_id pgtype.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const logoutById = `-- name: LogoutById :exec
 UPDATE users
 SET refresh_token = NULL, expired_at = NULL
@@ -69,30 +108,50 @@ func (q *Queries) LogoutById(ctx context.Context, userID pgtype.UUID) error {
 	return err
 }
 
-const updateCodeById = `-- name: UpdateCodeById :one
+const resetPasswordWithCodeAndSetTokens = `-- name: ResetPasswordWithCodeAndSetTokens :one
 UPDATE users
-SET code = NULL, refresh_token = $3, expired_at = $4
-WHERE email = $1 AND code = $2
+SET code = NULL, refresh_token = $3, expired_at = $4, password = $6
+WHERE user_id = $1 AND code = $2 AND email = $5
 RETURNING user_id
 `
 
-type UpdateCodeByIdParams struct {
-	Email        string           `json:"email"`
+type ResetPasswordWithCodeAndSetTokensParams struct {
+	UserID       pgtype.UUID      `json:"user_id"`
 	Code         pgtype.Text      `json:"code"`
 	RefreshToken pgtype.Text      `json:"refresh_token"`
 	ExpiredAt    pgtype.Timestamp `json:"expired_at"`
+	Email        string           `json:"email"`
+	Password     string           `json:"password"`
 }
 
-func (q *Queries) UpdateCodeById(ctx context.Context, arg UpdateCodeByIdParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, updateCodeById,
-		arg.Email,
+func (q *Queries) ResetPasswordWithCodeAndSetTokens(ctx context.Context, arg ResetPasswordWithCodeAndSetTokensParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, resetPasswordWithCodeAndSetTokens,
+		arg.UserID,
 		arg.Code,
 		arg.RefreshToken,
 		arg.ExpiredAt,
+		arg.Email,
+		arg.Password,
 	)
 	var user_id pgtype.UUID
 	err := row.Scan(&user_id)
 	return user_id, err
+}
+
+const updateCodeByUserId = `-- name: UpdateCodeByUserId :exec
+UPDATE users
+SET code = $1
+WHERE user_id = $2
+`
+
+type UpdateCodeByUserIdParams struct {
+	Code   pgtype.Text `json:"code"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) UpdateCodeByUserId(ctx context.Context, arg UpdateCodeByUserIdParams) error {
+	_, err := q.db.Exec(ctx, updateCodeByUserId, arg.Code, arg.UserID)
+	return err
 }
 
 const updateRefreshToken = `-- name: UpdateRefreshToken :exec

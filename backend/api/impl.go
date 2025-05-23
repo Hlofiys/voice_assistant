@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"errors"
 	"time"
 	db "voice_assistant/db/sqlc"
 	"voice_assistant/tools"
@@ -89,15 +90,20 @@ func (s *Server) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[ConfirmEmail] Error generating refresh token for user : %v", err)
 		return
 	}
-	updateCodeByIdParams := db.UpdateCodeByIdParams{
+	updateCodeByIdParams := db.ConfirmEmailWithTokensParams{
 		Email:        confirmEmailRequest.Email,
 		Code:         pgtype.Text{String: confirmEmailRequest.Code, Valid: true},
 		RefreshToken: pgtype.Text{String: refreshTokenString, Valid: true},
 		ExpiredAt:    pgtype.Timestamp{Time: refreshTokenExpiresAt, Valid: true},
 	}
 
-	pgUserID, err := s.db.UpdateCodeById(r.Context(), updateCodeByIdParams)
+	pgUserID, err := s.db.ConfirmEmailWithTokens(r.Context(), updateCodeByIdParams)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			log.Printf("[ConfirmEmail] User/code not found for email %s, code %s: %v", confirmEmailRequest.Email, confirmEmailRequest.Code, err)
+			http.Error(w, `{"message": "User for the provided email/code not found or code is invalid"}`, http.StatusNotFound)
+			return
+		}
 		http.Error(w, `{"message": "failed to confirm email address"}`, http.StatusInternalServerError)
 		log.Printf("[ConfirmEmail] Database error for email %s, code %s: %v", confirmEmailRequest.Email, confirmEmailRequest.Code, err)
 		return
@@ -122,7 +128,7 @@ func (s *Server) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("[ConfirmEmail] Error encoding success response: %v", err)
 	}
@@ -437,6 +443,160 @@ func (s *Server) ValidateToken(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("[ValidateToken] Error encoding success response: %v", err)
+	}
+}
+
+func (s *Server) RequestPasswordResetCode(w http.ResponseWriter, r *http.Request){
+	bodyBytes, err := io.ReadAll(r.Body)
+	defer func() { _ = r.Body.Close() }()
+	if err != nil {
+		http.Error(w, `{"message": "could not read request body"}`, http.StatusBadRequest)
+		log.Printf("[Register] Error reading request body: %v", err)
+		return
+	}
+	var passwordResetCodeRequest * PasswordResetCodeRequest
+	err = json.Unmarshal(bodyBytes, &passwordResetCodeRequest)
+	if err != nil {
+		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
+		log.Printf("[RequestPasswordResetCode] Error unmarshalling request body: %v", err)
+		return
+	}
+
+	if passwordResetCodeRequest.Email == "" {
+		http.Error(w, `{"message": "email are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	pgUserID, err := s.db.GetUserByEmail(r.Context(), passwordResetCodeRequest.Email)
+	if err != nil {
+		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+			log.Printf("[RequestPasswordResetCode] User not found for email: %s", passwordResetCodeRequest.Email)
+			http.Error(w, `{"message": "user not found"}`, http.StatusNotFound)
+			return
+		}
+		log.Printf("[RequestPasswordResetCode] Database error fetching user for email %s: %v", passwordResetCodeRequest.Email, err)
+		http.Error(w, `{"message": "internal server error while fetching user data"}`, http.StatusInternalServerError)
+		return
+	}
+
+	resetCode, err := generateNumericCode(6)
+	if err != nil {
+		log.Printf("[RequestPasswordResetCode] Error generating reset code for email %s: %v", passwordResetCodeRequest.Email, err)
+		http.Error(w, `{"message": "failed to generate reset code"}`, http.StatusInternalServerError)
+		return
+	}
+
+	updateCodeParams := db.UpdateCodeByUserIdParams{
+		Code:   pgtype.Text{String: resetCode, Valid: true},
+		UserID: pgUserID,
+	}
+	err = s.db.UpdateCodeByUserId(r.Context(), updateCodeParams)
+	if err != nil {
+		log.Printf("[RequestPasswordResetCode] Failed to update reset code for user ID %s: %v", pgUserID.Bytes, err)
+		http.Error(w, `{"message": "failed to save reset code"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK) 
+	responseMessage := map[string]string{"message": "Password reset code sent to your email. Your code is #" + resetCode} 
+	if err := json.NewEncoder(w).Encode(responseMessage); err != nil {
+		log.Printf("[RequestPasswordResetCode] Error encoding success response for email %s: %v", passwordResetCodeRequest.Email, err)
+	}
+}
+
+func (s *Server) ResetPasswordWithCode(w http.ResponseWriter, r *http.Request){
+	bodyBytes, err := io.ReadAll(r.Body)
+	defer func() { _ = r.Body.Close() }()
+	if err != nil {
+		http.Error(w, `{"message": "could not read request body"}`, http.StatusBadRequest)
+		log.Printf("[Register] Error reading request body: %v", err)
+		return
+	}
+	var passwordResetWithCodeRequest * PasswordResetWithCodeRequest;
+
+	err = json.Unmarshal(bodyBytes, &passwordResetWithCodeRequest)
+	if err != nil {
+		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
+		log.Printf("[RequestPasswordResetCode] Error unmarshalling request body: %v", err)
+		return
+	}
+
+	if passwordResetWithCodeRequest.Email == "" || passwordResetWithCodeRequest.NewPassword == "" || passwordResetWithCodeRequest.Code == "" {
+		http.Error(w, `{"message": "email, password and code are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	pgUserID, err := s.db.GetUserByEmail(r.Context(), passwordResetWithCodeRequest.Email)
+	if err != nil {
+		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+			log.Printf("[ResetPasswordWithCode] User not found for email: %s", passwordResetWithCodeRequest.Email)
+			http.Error(w, `{"message": "user not found"}`, http.StatusNotFound)
+			return
+		}
+		log.Printf("[ResetPasswordWithCode] Database error fetching user for email %s: %v", passwordResetWithCodeRequest.Email, err)
+		http.Error(w, `{"message": "internal server error while fetching user data"}`, http.StatusInternalServerError)
+		return
+	}
+
+	hashedNewPassword, err := bcrypt.GenerateFromPassword([]byte(passwordResetWithCodeRequest.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, `{"message": "failed to hash new password"}`, http.StatusInternalServerError)
+		log.Printf("[ResetPasswordWithCode] Error hashing new password for email %s: %v", passwordResetWithCodeRequest.Email, err)
+		return
+	}
+
+	refreshTokenString, refreshTokenExpiresAt, err := s.jwtAuth.GenerateRefreshToken()
+	if err != nil {
+		http.Error(w, `{"message": "failed to generate refresh token"}`, http.StatusInternalServerError)
+		log.Printf("[ResetPasswordWithCode] Error generating refresh token for user %s: %v", passwordResetWithCodeRequest.Email, err)
+		return
+	}
+
+	resetPasswordParams := db.ResetPasswordWithCodeAndSetTokensParams{ 
+		UserID:       pgUserID,                                                           
+		Code:         pgtype.Text{String: passwordResetWithCodeRequest.Code, Valid: true}, 
+		RefreshToken: pgtype.Text{String: refreshTokenString, Valid: true},               
+		ExpiredAt:    pgtype.Timestamp{Time: refreshTokenExpiresAt, Valid: true},           
+		Email:        passwordResetWithCodeRequest.Email,                                  
+		Password:     string(hashedNewPassword),                                           
+	}
+
+	_,err = s.db.ResetPasswordWithCodeAndSetTokens(r.Context(), resetPasswordParams)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows) {
+			log.Printf("[ResetPasswordWithCode] Failed to update password: invalid code or email. Email: %s, Code: %s", passwordResetWithCodeRequest.Email, passwordResetWithCodeRequest.Code)
+			http.Error(w, `{"message": "Invalid request: code is incorrect or already used"}`, http.StatusBadRequest)
+			return
+		}
+		log.Printf("[ResetPasswordWithCode] Database error resetting password for email %s: %v", passwordResetWithCodeRequest.Email, err)
+		http.Error(w, `{"message": "failed to reset password"}`, http.StatusInternalServerError)
+		return
+	}
+
+	appUserID, err := uuid.FromBytes(pgUserID.Bytes[:])
+	if err != nil {
+		log.Printf("[ResetPasswordWithCode] Error converting user ID: %v", err)
+		http.Error(w, `{"message": "internal server error - user ID conversion failed"}`, http.StatusInternalServerError)
+		return
+	}
+
+	accessToken, err := s.jwtAuth.GenerateToken(appUserID)
+	if err != nil {
+		http.Error(w, `{"message": "failed to generate access token"}`, http.StatusInternalServerError)
+		log.Printf("[ResetPasswordWithCode] Error generating access token for user %s: %v", passwordResetWithCodeRequest.Email, err)
+		return
+	}
+
+	response := PasswordResetWithCodeResponse{
+		Token:        accessToken,
+		RefreshToken: refreshTokenString,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("[ResetPasswordWithCode] Error encoding success response for email %s: %v", passwordResetWithCodeRequest.Email, err)
 	}
 }
 

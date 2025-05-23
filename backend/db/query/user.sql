@@ -34,8 +34,24 @@ UPDATE users
 SET refresh_token = NULL, expired_at = NULL
 WHERE user_id = $1;
 
--- name: UpdateCodeById :one
+-- name: ConfirmEmailWithTokens :one
 UPDATE users
 SET code = NULL, refresh_token = $3, expired_at = $4
 WHERE email = $1 AND code = $2
+RETURNING user_id;
+
+-- name: GetUserByEmail :one
+SELECT user_id
+FROM users
+WHERE email = $1;
+
+-- name: UpdateCodeByUserId :exec
+UPDATE users
+SET code = $1
+WHERE user_id = $2;
+
+-- name: ResetPasswordWithCodeAndSetTokens :one
+UPDATE users
+SET code = NULL, refresh_token = $3, expired_at = $4, password = $6
+WHERE user_id = $1 AND code = $2 AND email = $5
 RETURNING user_id;

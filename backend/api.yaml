@@ -111,6 +111,38 @@ components:
         refresh_token:
           type: string
           description: Refresh token
+    PasswordResetCodeRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+    PasswordResetWithCodeRequest:
+      type: object
+      required:
+        - email
+        - code
+        - new_password
+      properties:
+        email:
+          type: string
+        code:
+          type: string
+        new_password:
+          type: string
+    PasswordResetWithCodeResponse:
+      type: object
+      required:
+        - token
+        - refresh_token
+      properties:
+        token:
+          type: string
+          description: JWT token
+        refresh_token:
+          type: string
+          description: Refresh token
 
 paths:
   /api/auth/register:
@@ -253,7 +285,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "500":
-          description: Internal server error during logout process
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -317,7 +349,87 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "500":
-          description: Internal server error during logout process
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/password/request-reset-code:
+    post:
+      summary: Request a password reset code
+      operationId: requestPasswordResetCode
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetCodeRequest"
+      responses:
+        "200":
+          description: Password reset request successfully processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Password reset code sent to your email"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User with this email not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error 
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/password/reset-with-code:
+    post:
+      summary: Reset password using a verification code
+      operationId: resetPasswordWithCode
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetWithCodeRequest"
+      responses:
+        "200":
+          description: Password reset successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetWithCodeResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User with this email not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error 
           content:
             application/json:
               schema:

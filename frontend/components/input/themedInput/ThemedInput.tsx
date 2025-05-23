@@ -4,7 +4,6 @@ import {
   StyleSheet,
   TextInput,
   TextInputProps,
-  SafeAreaView,
   TouchableOpacity,
 } from "react-native";
 import React, { FC, useEffect, useMemo, useState } from "react";
@@ -44,7 +43,7 @@ const ThemedInput: FC<TThemedInputProps> = (props) => {
         {isShowForgotPassword && (
           <ThemedText
             type="link"
-            onPress={() => router.push("/forgotPassword")}
+            onPress={() => router.push("/forgotpassword")}
           >
             Забыл пароль
           </ThemedText>

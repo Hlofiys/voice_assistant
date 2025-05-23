@@ -1,5 +1,13 @@
 import { ThemedText } from "@/components/ThemedText";
-import React, { FC, useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  Dispatch,
+  FC,
+  SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   View,
   TextInput,
@@ -7,29 +15,29 @@ import {
   Keyboard,
   NativeSyntheticEvent,
   TextInputFocusEventData,
+  TouchableOpacity,
 } from "react-native";
 
 const CODE_LENGTH = 6;
 
 interface ICodeInputProps {
   code: string[];
-  onChange: (code: string[]) => void;
+  onChange: Dispatch<SetStateAction<string[]>>;
+  gap?: number;
 }
 const CodeInput: FC<ICodeInputProps> = (props) => {
-  const { code, onChange } = props;
-  const [localCode, setLocalCode] = useState(code);
+  const { code, onChange, gap = 16 } = props;
+  // const [localCode, setLocalCode] = useState(code);
   const inputsRef = useRef<(TextInput | null)[]>([]);
 
   // вызываем onChange при изменении localCode, но не внутри setState!
-  useEffect(() => {
-    onChange(localCode);
-  }, [localCode, onChange]);
+  useEffect(() => onChange(code), [code, onChange]);
 
   const handleChange = useCallback((text: string, index: number) => {
     const cleanText = text.replace(/\D/g, "");
 
     if (cleanText.length > 1) {
-      setLocalCode((prev) => {
+      onChange((prev) => {
         const newCode = [...prev];
         const chars = cleanText.slice(0, CODE_LENGTH - index).split("");
         chars.forEach((char, i) => {
@@ -46,7 +54,7 @@ const CodeInput: FC<ICodeInputProps> = (props) => {
       return;
     }
 
-    setLocalCode((prev) => {
+    onChange((prev) => {
       const newCode = [...prev];
       newCode[index] = cleanText;
 
@@ -64,24 +72,22 @@ const CodeInput: FC<ICodeInputProps> = (props) => {
     (e: any, index: number) => {
       if (
         e.nativeEvent.key === "Backspace" &&
-        localCode[index] === "" &&
+        code[index] === "" &&
         index > 0
       ) {
         inputsRef.current[index - 1]?.focus();
       }
     },
-    [localCode, inputsRef]
+    [code, inputsRef]
   );
 
   const handleFocus = useCallback(
     (e: NativeSyntheticEvent<TextInputFocusEventData>, index: number) => {
-      const allBeforeFilled = localCode
-        .slice(0, index)
-        .every((char) => char !== "");
+      const allBeforeFilled = code.slice(0, index).every((char) => char !== "");
       if (!allBeforeFilled) {
         e.preventDefault(); // попытка отменить фокус
         inputsRef.current.find((input, i) => {
-          if (localCode[i] === "") {
+          if (code[i] === "") {
             input?.focus();
             return true;
           }
@@ -89,23 +95,25 @@ const CodeInput: FC<ICodeInputProps> = (props) => {
         });
       }
     },
-    [localCode, inputsRef]
+    [code, inputsRef]
   );
 
   useEffect(() => {
-    if (localCode.every((el) => el !== "")) {
+    if (code.every((el) => el !== "")) {
       Keyboard.dismiss();
     }
-  }, [localCode]);
+  }, [code]);
 
   return (
-    <View style={styles.container}>
-      <ThemedText type="subtitle" style={styles.label}>
-        Enter Code
-      </ThemedText>
+    <View style={[styles.container, { gap }]}>
+      <TouchableOpacity>
+        <ThemedText type="subtitle" style={styles.label}>
+          Введите код
+        </ThemedText>
+      </TouchableOpacity>
 
       <View style={styles.inputsContainer}>
-        {localCode.map((digit, index) => (
+        {code.map((digit, index) => (
           <TextInput
             key={index}
             ref={(el) => {

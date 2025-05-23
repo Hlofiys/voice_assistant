@@ -3,10 +3,11 @@ import { FC, ReactNode } from "react";
 
 interface IControlPanel {
   children: ReactNode;
+  gap?: number;
 }
 const ControlPanel: FC<IControlPanel> = (props) => {
-  const { children } = props;
-  return <View style={styles.controlPanel}>{children}</View>;
+  const { children, gap = 32 } = props;
+  return <View style={[styles.controlPanel, { gap }]}>{children}</View>;
 };
 
 export default ControlPanel;

@@ -1,4 +1,4 @@
-import { ReactNode, FC } from "react";
+import { ReactNode, FC, useMemo } from "react";
 import {
   TouchableOpacity,
   StyleSheet,
@@ -21,6 +21,7 @@ interface ButtonProps {
   textStyle?: StyleProp<TextStyle>;
   backgroundColor?: string;
   type?: TButtonType;
+  loadingIndicatorColor?: string;
 }
 
 const Button: FC<ButtonProps> = ({
@@ -32,9 +33,13 @@ const Button: FC<ButtonProps> = ({
   style,
   textStyle,
   backgroundColor = "#0a7ea4",
-  type,
+  type = "primary",
+  loadingIndicatorColor,
 }) => {
-  const isDisabled = disabled || isLoading;
+  const isDisabled = useMemo(
+    () => disabled || isLoading,
+    [disabled, isLoading]
+  );
 
   return (
     <TouchableOpacity
@@ -42,14 +47,19 @@ const Button: FC<ButtonProps> = ({
       style={[
         styles.button,
         type === "text" ? styles.textButton : undefined,
-        { backgroundColor: isDisabled ? "#A0A0A0" : backgroundColor },
+        {
+          backgroundColor:
+            isDisabled && type !== "text"
+              ? "#A0A0A0"
+              : (type === "primary" && backgroundColor) || undefined,
+        },
         style,
       ]}
       activeOpacity={0.7}
       disabled={isDisabled}
     >
       {isLoading ? (
-        <ActivityIndicator color="#fff" />
+        <ActivityIndicator color={loadingIndicatorColor || "#fff"} />
       ) : (
         <ThemedText style={[styles.text, textStyle]}>
           {children ?? title}
@@ -70,7 +80,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   textButton: {
-    backgroundColor: "transparent !important",
+    backgroundColor: "red !important",
   },
   text: {
     color: "#FEFEFE",

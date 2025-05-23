@@ -7,14 +7,16 @@ import ControlPanel from "@/components/ControlPanel";
 import { ThemedText } from "@/components/ThemedText";
 import Button from "@/components/ui/buttons/Button";
 import { useRouter } from "expo-router";
-import { IBasicAuth } from "./auth";
 import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { hasAllValues } from "@/utils/functions/Functions";
+import { LoginRequest } from "@/api";
+import { useResetPassword } from "@/hooks/api/auth/useResetPassword";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export interface IForgotPasswordForm extends Omit<IBasicAuth, "password"> {}
+export interface IForgotPasswordForm extends Omit<LoginRequest, "password"> {}
 const forgotPassword = () => {
-  const [isLoading, setisLoading] = useState<boolean>(false);
-
+  const { mutateAsync: reset_password, isPending: isPendingReset } =
+    useResetPassword();
   const {
     control,
     watch,
@@ -37,15 +39,28 @@ const forgotPassword = () => {
   }, [watch(), errors, hasAllValues]);
 
   const router = useRouter();
-  const onSubmit: SubmitHandler<IForgotPasswordForm> = (data) => {
-    setisLoading(true);
-    console.log(data);
+  const onSubmit: SubmitHandler<IForgotPasswordForm> = ({ email }) => {
+    reset_password(
+      { email },
+      {
+        onSuccess: async ({ data }) => {
+          const { message, email: responceEmail } = data; //Исправить
 
-    setTimeout(() => {
-      setisLoading(false);
-      router.push("/");
-    }, 3000);
+          const code = message?.match(/#(\S+)/);
+          if (code?.[1]) {
+            const confirmData = { code: code[1], email: responceEmail };
+            await AsyncStorage.setItem(
+              "resetPasswordData",
+              JSON.stringify(confirmData)
+            );
+          }
+
+          router.push("/(identity)/setpassword");
+        },
+      }
+    );
   };
+
   return (
     <IdentityLayout
       header="Восстановление пароля"
@@ -78,15 +93,15 @@ const forgotPassword = () => {
       <View style={styles.control}>
         <ControlPanel>
           <Button
-            type="text"
+            type="primary"
             title="Отправить"
-            isLoading={isLoading}
+            isLoading={isPendingReset}
             disabled={isButtonDisabled}
             onPress={handleSubmit(onSubmit)}
           />
           <ThemedText>
             Вспомнили пароль?{" "}
-            <ThemedText type="link" onPress={() => router.push("/register")}>
+            <ThemedText type="link" onPress={() => router.push("/auth")}>
               Авторизоваться
             </ThemedText>
           </ThemedText>

@@ -5,6 +5,7 @@ import {
   StyleSheet,
   GestureResponderEvent,
   StyleProp,
+  Text,
   ViewStyle,
 } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
@@ -43,6 +44,7 @@ const Checkbox: FC<CheckboxProps> = ({
     <TouchableOpacity
       activeOpacity={0.7}
       onPress={toggleCheckbox}
+      // onPress={()=>console.log(label)}
       style={[styles.container, styleBlocks?.container]}
       disabled={disabled} // если disabled — TouchableOpacity заблокирован, если только readOnly — не заблокирован
     >
@@ -95,6 +97,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    lineHeight: 0,
+    lineHeight: 18,
+    color: "white",
   },
 });

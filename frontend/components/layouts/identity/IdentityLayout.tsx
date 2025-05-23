@@ -1,4 +1,9 @@
-import { View, StyleSheet, TouchableOpacity } from "react-native";
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+} from "react-native";
 import React, { FC } from "react";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { ThemedText } from "@/components/ThemedText";
@@ -16,7 +21,7 @@ const IdentityLayout: FC<IIdentityLayout> = (props) => {
 
   return (
     <View style={styles.identityContainer}>
-      <BlurView intensity={35} tint="light" style={styles.backButton} >
+      <BlurView intensity={35} tint="light" style={styles.backButton}>
         <TouchableOpacity onPress={router.back}>
           <IconSymbol
             name="chevron.left"
@@ -27,6 +32,17 @@ const IdentityLayout: FC<IIdentityLayout> = (props) => {
           />
         </TouchableOpacity>
       </BlurView>
+      {/* <BlurView intensity={35} tint="light" style={styles.logoutBtn}>
+        <TouchableOpacity onPress={router.back}>
+          <IconSymbol
+            name="chevron.left"
+            size={20}
+            weight="medium"
+            color={"0a7ea4"}
+            style={styles.icon}
+          />
+        </TouchableOpacity>
+      </BlurView> */}
       <View style={styles.textComponent}>
         <ThemedText type="title" style={styles.header}>
           {header}
@@ -63,8 +79,8 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
-    overflow: 'hidden',
-    borderRadius: '50%',
+    overflow: "hidden",
+    borderRadius: "50%",
     // backgroundColor: "transparent",
     position: "absolute",
     display: "flex",
@@ -73,9 +89,23 @@ const styles = StyleSheet.create({
     top: 60,
     left: 10,
   },
+  logoutBtn: {
+    width: 40,
+    height: 40,
+    overflow: "hidden",
+    borderRadius: "50%",
+    // backgroundColor: "transparent",
+    position: "absolute",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    top: 60,
+    right: 10,
+  },
   icon: {
     display: "flex",
     alignItems: "center",
+    color: "#0a7ea4",
     zIndex: 99,
     margin: 0,
     padding: 0,

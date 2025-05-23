@@ -141,6 +141,63 @@ export interface ModelError {
 /**
  * 
  * @export
+ * @interface PasswordResetCodeRequest
+ */
+export interface PasswordResetCodeRequest {
+    /**
+     * 
+     * @type {string}
+     * @memberof PasswordResetCodeRequest
+     */
+    'email': string;
+}
+/**
+ * 
+ * @export
+ * @interface PasswordResetWithCodeRequest
+ */
+export interface PasswordResetWithCodeRequest {
+    /**
+     * 
+     * @type {string}
+     * @memberof PasswordResetWithCodeRequest
+     */
+    'email': string;
+    /**
+     * 
+     * @type {string}
+     * @memberof PasswordResetWithCodeRequest
+     */
+    'code': string;
+    /**
+     * 
+     * @type {string}
+     * @memberof PasswordResetWithCodeRequest
+     */
+    'new_password': string;
+}
+/**
+ * 
+ * @export
+ * @interface PasswordResetWithCodeResponse
+ */
+export interface PasswordResetWithCodeResponse {
+    /**
+     * JWT token
+     * @type {string}
+     * @memberof PasswordResetWithCodeResponse
+     */
+    'token': string;
+    /**
+     * Refresh token
+     * @type {string}
+     * @memberof PasswordResetWithCodeResponse
+     */
+    'refresh_token': string;
+}
+/**
+ * 
+ * @export
  * @interface RefreshRequest
  */
 export interface RefreshRequest {
@@ -201,6 +258,19 @@ export interface RegisterResponse {
      * @memberof RegisterResponse
      */
     'message': string;
+}
+/**
+ * 
+ * @export
+ * @interface RequestPasswordResetCode200Response
+ */
+export interface RequestPasswordResetCode200Response {
+    /**
+     * 
+     * @type {string}
+     * @memberof RequestPasswordResetCode200Response
+     */
+    'message'?: string;
 }
 /**
  * 
@@ -415,6 +485,78 @@ export const AuthenticationApiAxiosParamCreator = function (configuration?: Conf
         },
         /**
          * 
+         * @summary Request a password reset code
+         * @param {PasswordResetCodeRequest} passwordResetCodeRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        requestPasswordResetCode: async (passwordResetCodeRequest: PasswordResetCodeRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'passwordResetCodeRequest' is not null or undefined
+            assertParamExists('requestPasswordResetCode', 'passwordResetCodeRequest', passwordResetCodeRequest)
+            const localVarPath = `/api/auth/password/request-reset-code`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(passwordResetCodeRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Reset password using a verification code
+         * @param {PasswordResetWithCodeRequest} passwordResetWithCodeRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        resetPasswordWithCode: async (passwordResetWithCodeRequest: PasswordResetWithCodeRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'passwordResetWithCodeRequest' is not null or undefined
+            assertParamExists('resetPasswordWithCode', 'passwordResetWithCodeRequest', passwordResetWithCodeRequest)
+            const localVarPath = `/api/auth/password/reset-with-code`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(passwordResetWithCodeRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
          * @summary Validate current authentication token
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -523,6 +665,32 @@ export const AuthenticationApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
+         * @summary Request a password reset code
+         * @param {PasswordResetCodeRequest} passwordResetCodeRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async requestPasswordResetCode(passwordResetCodeRequest: PasswordResetCodeRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<RequestPasswordResetCode200Response>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.requestPasswordResetCode(passwordResetCodeRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['AuthenticationApi.requestPasswordResetCode']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Reset password using a verification code
+         * @param {PasswordResetWithCodeRequest} passwordResetWithCodeRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async resetPasswordWithCode(passwordResetWithCodeRequest: PasswordResetWithCodeRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<PasswordResetWithCodeResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.resetPasswordWithCode(passwordResetWithCodeRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['AuthenticationApi.resetPasswordWithCode']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
          * @summary Validate current authentication token
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -591,6 +759,26 @@ export const AuthenticationApiFactory = function (configuration?: Configuration,
          */
         register(registerRequest: RegisterRequest, options?: RawAxiosRequestConfig): AxiosPromise<RegisterResponse> {
             return localVarFp.register(registerRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Request a password reset code
+         * @param {PasswordResetCodeRequest} passwordResetCodeRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        requestPasswordResetCode(passwordResetCodeRequest: PasswordResetCodeRequest, options?: RawAxiosRequestConfig): AxiosPromise<RequestPasswordResetCode200Response> {
+            return localVarFp.requestPasswordResetCode(passwordResetCodeRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Reset password using a verification code
+         * @param {PasswordResetWithCodeRequest} passwordResetWithCodeRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        resetPasswordWithCode(passwordResetWithCodeRequest: PasswordResetWithCodeRequest, options?: RawAxiosRequestConfig): AxiosPromise<PasswordResetWithCodeResponse> {
+            return localVarFp.resetPasswordWithCode(passwordResetWithCodeRequest, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -668,6 +856,30 @@ export class AuthenticationApi extends BaseAPI {
      */
     public register(registerRequest: RegisterRequest, options?: RawAxiosRequestConfig) {
         return AuthenticationApiFp(this.configuration).register(registerRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Request a password reset code
+     * @param {PasswordResetCodeRequest} passwordResetCodeRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof AuthenticationApi
+     */
+    public requestPasswordResetCode(passwordResetCodeRequest: PasswordResetCodeRequest, options?: RawAxiosRequestConfig) {
+        return AuthenticationApiFp(this.configuration).requestPasswordResetCode(passwordResetCodeRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Reset password using a verification code
+     * @param {PasswordResetWithCodeRequest} passwordResetWithCodeRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof AuthenticationApi
+     */
+    public resetPasswordWithCode(passwordResetWithCodeRequest: PasswordResetWithCodeRequest, options?: RawAxiosRequestConfig) {
+        return AuthenticationApiFp(this.configuration).resetPasswordWithCode(passwordResetWithCodeRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

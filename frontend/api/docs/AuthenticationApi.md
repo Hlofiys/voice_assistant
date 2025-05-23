@@ -9,6 +9,8 @@ All URIs are relative to *https://assistant.hlofiys.xyz*
 |[**logout**](#logout) | **POST** /api/auth/logout | Log out current user|
 |[**refreshTokens**](#refreshtokens) | **POST** /api/auth/refresh | Refresh access and refresh tokens|
 |[**register**](#register) | **POST** /api/auth/register | Register a new user|
+|[**requestPasswordResetCode**](#requestpasswordresetcode) | **POST** /api/auth/password/request-reset-code | Request a password reset code|
+|[**resetPasswordWithCode**](#resetpasswordwithcode) | **POST** /api/auth/password/reset-with-code | Reset password using a verification code|
 |[**validateToken**](#validatetoken) | **GET** /api/auth/validate-token | Validate current authentication token|
 
 # **confirmEmail**
@@ -160,7 +162,7 @@ This endpoint does not have any parameters.
 |-------------|-------------|------------------|
 |**200** | Logout successful |  -  |
 |**401** | Unauthorized. Invalid or missing authentication token |  -  |
-|**500** | Internal server error during logout process |  -  |
+|**500** | Internal server error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
@@ -214,7 +216,7 @@ No authorization required
 |**200** | Tokens refreshed successfully |  -  |
 |**400** | Invalid request |  -  |
 |**401** | Unauthorized. The refresh token is invalid |  -  |
-|**500** | Internal server error during logout process |  -  |
+|**500** | Internal server error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
@@ -267,6 +269,115 @@ No authorization required
 |-------------|-------------|------------------|
 |**201** | Registration successful. |  -  |
 |**400** | Invalid request or user already exists |  -  |
+|**409** | User with this email already exists |  -  |
+|**500** | Internal server error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **requestPasswordResetCode**
+> RequestPasswordResetCode200Response requestPasswordResetCode(passwordResetCodeRequest)
+
+
+### Example
+
+```typescript
+import {
+    AuthenticationApi,
+    Configuration,
+    PasswordResetCodeRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new AuthenticationApi(configuration);
+
+let passwordResetCodeRequest: PasswordResetCodeRequest; //
+
+const { status, data } = await apiInstance.requestPasswordResetCode(
+    passwordResetCodeRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **passwordResetCodeRequest** | **PasswordResetCodeRequest**|  | |
+
+
+### Return type
+
+**RequestPasswordResetCode200Response**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | Password reset request successfully processed |  -  |
+|**400** | Invalid request |  -  |
+|**404** | User with this email not found |  -  |
+|**500** | Internal server error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **resetPasswordWithCode**
+> PasswordResetWithCodeResponse resetPasswordWithCode(passwordResetWithCodeRequest)
+
+
+### Example
+
+```typescript
+import {
+    AuthenticationApi,
+    Configuration,
+    PasswordResetWithCodeRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new AuthenticationApi(configuration);
+
+let passwordResetWithCodeRequest: PasswordResetWithCodeRequest; //
+
+const { status, data } = await apiInstance.resetPasswordWithCode(
+    passwordResetWithCodeRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **passwordResetWithCodeRequest** | **PasswordResetWithCodeRequest**|  | |
+
+
+### Return type
+
+**PasswordResetWithCodeResponse**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | Password reset successfully |  -  |
+|**400** | Invalid request |  -  |
+|**404** | User with this email not found |  -  |
 |**500** | Internal server error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)

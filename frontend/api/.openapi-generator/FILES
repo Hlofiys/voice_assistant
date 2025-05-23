@@ -13,10 +13,14 @@ docs/Error.md
 docs/LoginRequest.md
 docs/LoginResponse.md
 docs/Logout200Response.md
+docs/PasswordResetCodeRequest.md
+docs/PasswordResetWithCodeRequest.md
+docs/PasswordResetWithCodeResponse.md
 docs/RefreshRequest.md
 docs/RefreshResponse.md
 docs/RegisterRequest.md
 docs/RegisterResponse.md
+docs/RequestPasswordResetCode200Response.md
 docs/Token.md
 docs/ValidateToken200Response.md
 git_push.sh

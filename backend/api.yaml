@@ -118,6 +118,16 @@ components:
       properties:
         email:
           type: string
+    PasswordResetCodeResponse:
+      type: object
+      required:
+        - email
+        - message
+      properties:
+        email:
+          type: string
+        message:
+          type: string
     PasswordResetWithCodeRequest:
       type: object
       required:
@@ -373,11 +383,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Password reset code sent to your email"
+                $ref: "#/components/schemas/PasswordResetCodeResponse"
         "400":
           description: Invalid request
           content:

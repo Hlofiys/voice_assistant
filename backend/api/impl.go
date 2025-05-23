@@ -503,8 +503,13 @@ func (s *Server) RequestPasswordResetCode(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK) 
-	responseMessage := map[string]string{"message": "Password reset code sent to your email. Your code is #" + resetCode} 
-	if err := json.NewEncoder(w).Encode(responseMessage); err != nil {
+	
+	response := PasswordResetCodeResponse{
+		Email:  passwordResetCodeRequest.Email,
+		Message: "Password reset code sent to your email. Your code is #" + resetCode,
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("[RequestPasswordResetCode] Error encoding success response for email %s: %v", passwordResetCodeRequest.Email, err)
 	}
 }

@@ -4,13 +4,13 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"math/big"
 	"net/http"
 	"strings"
-	"errors"
 	"time"
 	db "voice_assistant/db/sqlc"
 	"voice_assistant/tools"
@@ -46,7 +46,7 @@ type Server struct {
 }
 
 func NewServer(jwtAuth tools.Authenticator, client *genai.Client, clientEmbs *genaiembs.Client, chromaDBClient chromago.Client, chromaCollection string, db *db.Queries) Server {
-	chatModelName := "gemini-2.0-flash-lite"
+	chatModelName := "gemini-2.0-flash"
 
 	ef, err := g.NewGeminiEmbeddingFunction(g.WithEnvAPIKey(), g.WithDefaultModel("text-embedding-004"), g.WithClient(clientEmbs))
 	if err != nil {
@@ -450,7 +450,7 @@ func (s *Server) ValidateToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) RequestPasswordResetCode(w http.ResponseWriter, r *http.Request){
+func (s *Server) RequestPasswordResetCode(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, err := io.ReadAll(r.Body)
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
@@ -458,7 +458,7 @@ func (s *Server) RequestPasswordResetCode(w http.ResponseWriter, r *http.Request
 		log.Printf("[Register] Error reading request body: %v", err)
 		return
 	}
-	var passwordResetCodeRequest * PasswordResetCodeRequest
+	var passwordResetCodeRequest *PasswordResetCodeRequest
 	err = json.Unmarshal(bodyBytes, &passwordResetCodeRequest)
 	if err != nil {
 		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
@@ -502,10 +502,10 @@ func (s *Server) RequestPasswordResetCode(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK) 
-	
+	w.WriteHeader(http.StatusOK)
+
 	response := PasswordResetCodeResponse{
-		Email:  passwordResetCodeRequest.Email,
+		Email:   passwordResetCodeRequest.Email,
 		Message: "Password reset code sent to your email. Your code is #" + resetCode,
 	}
 
@@ -514,7 +514,7 @@ func (s *Server) RequestPasswordResetCode(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (s *Server) ResetPasswordWithCode(w http.ResponseWriter, r *http.Request){
+func (s *Server) ResetPasswordWithCode(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, err := io.ReadAll(r.Body)
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
@@ -522,7 +522,7 @@ func (s *Server) ResetPasswordWithCode(w http.ResponseWriter, r *http.Request){
 		log.Printf("[Register] Error reading request body: %v", err)
 		return
 	}
-	var passwordResetWithCodeRequest * PasswordResetWithCodeRequest;
+	var passwordResetWithCodeRequest *PasswordResetWithCodeRequest
 
 	err = json.Unmarshal(bodyBytes, &passwordResetWithCodeRequest)
 	if err != nil {
@@ -562,16 +562,16 @@ func (s *Server) ResetPasswordWithCode(w http.ResponseWriter, r *http.Request){
 		return
 	}
 
-	resetPasswordParams := db.ResetPasswordWithCodeAndSetTokensParams{ 
-		UserID:       pgUserID,                                                           
-		Code:         pgtype.Text{String: passwordResetWithCodeRequest.Code, Valid: true}, 
-		RefreshToken: pgtype.Text{String: refreshTokenString, Valid: true},               
-		ExpiredAt:    pgtype.Timestamp{Time: refreshTokenExpiresAt, Valid: true},           
-		Email:        passwordResetWithCodeRequest.Email,                                  
-		Password:     string(hashedNewPassword),                                           
+	resetPasswordParams := db.ResetPasswordWithCodeAndSetTokensParams{
+		UserID:       pgUserID,
+		Code:         pgtype.Text{String: passwordResetWithCodeRequest.Code, Valid: true},
+		RefreshToken: pgtype.Text{String: refreshTokenString, Valid: true},
+		ExpiredAt:    pgtype.Timestamp{Time: refreshTokenExpiresAt, Valid: true},
+		Email:        passwordResetWithCodeRequest.Email,
+		Password:     string(hashedNewPassword),
 	}
 
-	_,err = s.db.ResetPasswordWithCodeAndSetTokens(r.Context(), resetPasswordParams)
+	_, err = s.db.ResetPasswordWithCodeAndSetTokens(r.Context(), resetPasswordParams)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows) {
 			log.Printf("[ResetPasswordWithCode] Failed to update password: invalid code or email. Email: %s, Code: %s", passwordResetWithCodeRequest.Email, passwordResetWithCodeRequest.Code)
@@ -688,7 +688,7 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 		// Example:
 		ToolConfig: &genai.ToolConfig{
 			FunctionCallingConfig: &genai.FunctionCallingConfig{
-				Mode: genai.FunctionCallingConfigModeAny, // Or ANY, NONE
+				Mode: genai.FunctionCallingConfigModeAuto, // Or ANY, NONE
 			},
 		},
 	}
@@ -704,13 +704,32 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Construct the first message to the LLM (prompt + audio)
-	prompt1Text := `Ты русскоязычный голосовой помощник для поиска аптек.
-Твоя задача - обработать аудиозапрос пользователя.
-1.  Сделай транскрипцию аудио. Пожалуйста, не добавляй никаких дополнительных комментариев к транскрипции, если только не отвечаешь на общий вопрос. Текст будет только на русском языке. Если ты не уверен с транскрипцией английского текста, просто оставь его без изменений. Указывай числа цифрами, а не словами. Название городов пиши без окончаний, просто город (Например 'Минск' а не 'Минске').
-2.  На основе транскрипции, определи параметры для поиска аптеки: название аптеки (pharmacy_name), номер аптеки (pharmacy_number), город (city), улица (street) и номер дома (house_number).
-3.  Если пользователь явно ищет аптеку или предоставляет информацию, которая может быть использована для поиска аптеки, вызови инструмент 'find_pharmacies'. Передай ему все извлеченные параметры и ОБЯЗАТЕЛЬНО полную транскрипцию в поле 'user_query_transcription'. Если какой-то необязательный параметр не найден, не передавай его или передай как пустую строку.
-4.  Если пользователь не ищет аптеку (например, просто поздоровался или задал общий вопрос), или если запрос слишком неясный для поиска, просто ответь на основе транскрипции, не вызывая инструмент.
-Ответ должен быть кратким и ясным, без форматирования, не используй спец символов, только текст. Важно: ответ будет использован для синтеза речи.
+	prompt1Text := `Ты русскоязычный голосовой помощник, специализирующийся на поиске аптек.
+Твоя **главная задача** — помочь пользователю найти аптеку или информацию о ней.
+
+Внимательно проанализируй аудиозапрос пользователя:
+1.  Сделай точную транскрипцию аудио на русском языке. Числа указывай цифрами (например, '5', а не 'пять'). Названия городов пиши в именительном падеже (например, 'Минск', а не 'в Минске'). Не добавляй никаких лишних комментариев или вводных фраз к транскрипции, если только не отвечаешь на общий вопрос.
+2.  Определи, связан ли запрос пользователя с поиском аптек и информацией о них.
+3.  **Если запрос пользователя ХОТЬ КАК-ТО связан с необходимостью найти аптеку или получить информацию о ней (например, поиск конкретной аптеки, интерес к адресам, номерам), ты ОБЯЗАТЕЛЬНО ДОЛЖЕН:**
+    a.  Извлечь из транскрипции следующие параметры, если они явно указаны: название аптеки (pharmacy_name), номер аптеки (pharmacy_number), город (city), улица (street), номер дома (house_number). Не добавляй к параметрам общие слова вроде "город", "улица", "аптека".
+    b.  **Вызвать инструмент 'find_pharmacies'**.
+    c.  Передать в этот инструмент **полную транскрипцию запроса пользователя** в поле 'user_query_transcription'.
+    d.  Передать также все извлеченные параметры (из пункта 3а). Если какой-либо из необязательных параметров (pharmacy_name, pharmacy_number, city, street, house_number) не найден или не был явно указан, не передавай его или передай как пустую строку.
+4.  Если запрос пользователя совершенно не относится к аптекам (например, это простое приветствие, вопрос на отвлеченную тему, просьба рассказать анекдот, или если речь совершенно неразборчива), тогда просто ответь на основе транскрипции (если она возможна), не вызывая инструмент 'find_pharmacies'.
+Твой финальный текстовый ответ пользователю должен быть кратким, ясным, только на русском языке, и готов для синтеза речи (чистый текст, без Markdown, HTML или других спецсимволов).
+
+**Примеры запросов, когда НУЖНО вызывать 'find_pharmacies':**
+- "Найди аптеку номер 5 на улице Ленина в Минске"
+- "Где поблизости купить аспирин в Гомеле?"
+- "Мне нужна информация по аптеке Планета Здоровья на Советской"
+- "Ищу круглосуточную аптеку"
+- "Есть ли рядом аптеки?"
+- "Подскажи аптеку в центре города"
+
+**Примеры запросов, когда НЕ НУЖНО вызывать 'find_pharmacies':**
+- "Привет, как дела?"
+- "Какая сегодня погода?"
+- (неразборчивая или бессмысленная речь)
 `
 	promptTextPart := genai.Part{Text: prompt1Text}
 	initialUserParts := []genai.Part{promptTextPart, audioDataPart}

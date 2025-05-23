@@ -154,6 +154,25 @@ export interface PasswordResetCodeRequest {
 /**
  * 
  * @export
+ * @interface PasswordResetCodeResponse
+ */
+export interface PasswordResetCodeResponse {
+    /**
+     * 
+     * @type {string}
+     * @memberof PasswordResetCodeResponse
+     */
+    'email': string;
+    /**
+     * 
+     * @type {string}
+     * @memberof PasswordResetCodeResponse
+     */
+    'message': string;
+}
+/**
+ * 
+ * @export
  * @interface PasswordResetWithCodeRequest
  */
 export interface PasswordResetWithCodeRequest {
@@ -258,19 +277,6 @@ export interface RegisterResponse {
      * @memberof RegisterResponse
      */
     'message': string;
-}
-/**
- * 
- * @export
- * @interface RequestPasswordResetCode200Response
- */
-export interface RequestPasswordResetCode200Response {
-    /**
-     * 
-     * @type {string}
-     * @memberof RequestPasswordResetCode200Response
-     */
-    'message'?: string;
 }
 /**
  * 
@@ -670,7 +676,7 @@ export const AuthenticationApiFp = function(configuration?: Configuration) {
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async requestPasswordResetCode(passwordResetCodeRequest: PasswordResetCodeRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<RequestPasswordResetCode200Response>> {
+        async requestPasswordResetCode(passwordResetCodeRequest: PasswordResetCodeRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<PasswordResetCodeResponse>> {
             const localVarAxiosArgs = await localVarAxiosParamCreator.requestPasswordResetCode(passwordResetCodeRequest, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['AuthenticationApi.requestPasswordResetCode']?.[localVarOperationServerIndex]?.url;
@@ -767,7 +773,7 @@ export const AuthenticationApiFactory = function (configuration?: Configuration,
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        requestPasswordResetCode(passwordResetCodeRequest: PasswordResetCodeRequest, options?: RawAxiosRequestConfig): AxiosPromise<RequestPasswordResetCode200Response> {
+        requestPasswordResetCode(passwordResetCodeRequest: PasswordResetCodeRequest, options?: RawAxiosRequestConfig): AxiosPromise<PasswordResetCodeResponse> {
             return localVarFp.requestPasswordResetCode(passwordResetCodeRequest, options).then((request) => request(axios, basePath));
         },
         /**

@@ -14,24 +14,27 @@ import { BlurView } from "expo-blur";
 interface IIdentityLayout extends IWithChildren {
   header: string;
   subtitle?: string;
+  hiddenBackBtn?: boolean;
 }
 const IdentityLayout: FC<IIdentityLayout> = (props) => {
-  const { header, subtitle, children } = props;
+  const { header, subtitle, hiddenBackBtn, children } = props;
   const router = useRouter();
 
   return (
     <View style={styles.identityContainer}>
-      <BlurView intensity={35} tint="light" style={styles.backButton}>
-        <TouchableOpacity onPress={router.back}>
-          <IconSymbol
-            name="chevron.left"
-            size={20}
-            weight="medium"
-            color={"0a7ea4"}
-            style={styles.icon}
-          />
-        </TouchableOpacity>
-      </BlurView>
+      {!hiddenBackBtn && (
+        <BlurView intensity={35} tint="light" style={styles.backButton}>
+          <TouchableOpacity onPress={router.back}>
+            <IconSymbol
+              name="chevron.left"
+              size={20}
+              weight="medium"
+              color={"0a7ea4"}
+              style={styles.icon}
+            />
+          </TouchableOpacity>
+        </BlurView>
+      )}
       {/* <BlurView intensity={35} tint="light" style={styles.logoutBtn}>
         <TouchableOpacity onPress={router.back}>
           <IconSymbol

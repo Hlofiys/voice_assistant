@@ -1,5 +1,11 @@
 import { Alert } from "@/components/modal/alert/Alert";
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+} from "react";
 
 type AlertParams = {
   title: string;
@@ -26,23 +32,36 @@ export const AlertProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const showAlert = useCallback(
     (newParams: AlertParams) => {
-      if (visible) return; // 🛑 Не открываем второй алерт
-      setParams(newParams);
-      setVisible(true);
+      if (visible) {
+        // сначала скрываем текущий alert
+        setVisible(false);
+
+        // подождать завершения анимации (300ms) перед показом нового
+        setTimeout(() => {
+          setParams(newParams);
+          setVisible(true);
+        }, 300);
+      } else {
+        setParams(newParams);
+        setVisible(true);
+      }
     },
     [visible]
   );
 
   const onClose = useCallback(() => {
-    setVisible(false);
-    setTimeout(() => setParams(null), 300); // чуть позже убираем параметры
+    setVisible(false); // скрыть с анимацией
+    setParams(null); // размонтировать после анимации
   }, []);
 
   return (
-    <AlertContext.Provider value={{ showAlert, isAlertVisible: visible }}>
+    <AlertContext.Provider
+      value={{ showAlert, isAlertVisible: visible }}
+    >
       {children}
-      {params && (
+      {visible && params && (
         <Alert
+          key={params.title + (params.subtitle || "")}
           visible={visible}
           title={params.title}
           subtitle={params.subtitle}

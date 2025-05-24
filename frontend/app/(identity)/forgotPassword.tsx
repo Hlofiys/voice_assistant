@@ -11,7 +11,8 @@ import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { hasAllValues } from "@/utils/functions/Functions";
 import { LoginRequest } from "@/api";
 import { useResetPassword } from "@/hooks/api/auth/useResetPassword";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStorage from "expo-secure-store";
+import { SecureStorageKeys } from "@/constants/SecureStorage";
 
 export interface IForgotPasswordForm extends Omit<LoginRequest, "password"> {}
 const forgotPassword = () => {
@@ -48,10 +49,10 @@ const forgotPassword = () => {
 
           const code = message?.match(/#(\S+)/);
           if (code?.[1]) {
-            const confirmData = { code: code[1], email: responceEmail };
-            await AsyncStorage.setItem(
-              "resetPasswordData",
-              JSON.stringify(confirmData)
+            const resetPasswordData = { code: code[1], email: responceEmail };
+            await SecureStorage.setItemAsync(
+              SecureStorageKeys.RESET_PASSWORD_DATA,
+              JSON.stringify(resetPasswordData)
             );
           }
 

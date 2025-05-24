@@ -1,7 +1,7 @@
 import { View, StyleSheet } from "react-native";
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStorage from "expo-secure-store";
 import { Controller, SubmitHandler, useForm } from "react-hook-form";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -18,6 +18,7 @@ import { hasAllValues } from "@/utils/functions/Functions";
 
 import type { RegisterRequest } from "@/api";
 import { usePasswordRules } from "@/hooks/gen/password/usePasswordRules";
+import { SecureStorageKeys } from "@/constants/SecureStorage";
 
 interface IRegisterForm extends RegisterRequest {
   confirmPassword: string;
@@ -59,6 +60,8 @@ const Register = () => {
     return hasEmptyFields || hasValidationErrors || !isValid;
   }, [allValues, errors, rules]);
 
+  useEffect(() => console.log(touchedFields.email), [touchedFields.email]);
+
   const onSubmit: SubmitHandler<IRegisterForm> = useCallback(
     (data) => {
       const { email, password } = data;
@@ -70,14 +73,15 @@ const Register = () => {
           const code = message.match(/#(\S+)/);
           if (code?.[1]) {
             const confirmData = { code: code[1], email };
-            await AsyncStorage.setItem(
-              "confirmData",
+            await SecureStorage.setItemAsync(
+              SecureStorageKeys.CONFIRM_DATA,
               JSON.stringify(confirmData)
             );
+            console.log("set confirm data: ", confirmData);
           }
           router.push("/confirm");
           reset();
-        }
+        },
       });
     },
     [register, reset, router]
@@ -110,19 +114,29 @@ const Register = () => {
         <Controller
           name="password"
           control={control}
+          rules={{
+            pattern: {
+              value: /^(?=.*[A-ZА-Я])(?=.*\d).{8,}$/,
+              message: "Введите корректный пароль",
+            },
+          }}
           render={({ field }) => (
             <ThemedInput
               {...field}
               label="Пароль"
               placeholder="********"
               isPassword
+              touched={!!touchedFields?.password && !isVisible}
               onChangeText={field.onChange}
               onFocus={() => setIsVisible(true)}
-              onBlur={() => setIsVisible(false)}
+              onBlur={() => {
+                field.onBlur();
+                setIsVisible(false);
+              }}
               textContentType="oneTimeCode"
               autoComplete="off"
               autoCorrect={false}
-              error={errors.password?.message || "Введите корректный пароль"}
+              error={errors.password?.message}
             />
           )}
         />
@@ -139,6 +153,7 @@ const Register = () => {
               label="Подтвердите пароль"
               placeholder="********"
               isPassword
+              touched={!!touchedFields?.confirmPassword}
               onChangeText={field.onChange}
               textContentType="oneTimeCode"
               autoComplete="off"

@@ -1,7 +1,8 @@
 // middleware/AuthToken.ts
 import { Middleware } from "@reduxjs/toolkit";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStorage from "expo-secure-store";
 import { setToken } from "../Slices";
+import { SecureStorageKeys } from "@/constants/SecureStorage";
 
 export const authMiddleware: Middleware = (storeAPI) => {
   let initialized = false;
@@ -11,9 +12,11 @@ export const authMiddleware: Middleware = (storeAPI) => {
       initialized = true;
 
       try {
-        const token = await AsyncStorage.getItem("accessToken");
+        const token = await SecureStorage.getItemAsync(
+          SecureStorageKeys.ACCESS_TOKEN
+        );
         if (token) {
-          console.log('middleWare: ', token);
+          console.log("middleWare: ", token);
           storeAPI.dispatch(setToken(token));
         }
       } catch (error) {

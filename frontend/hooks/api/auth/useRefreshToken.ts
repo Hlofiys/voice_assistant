@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { useAuthApi } from "./useAuthApi.instance";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStorage from "expo-secure-store";
 import { useDispatch } from "react-redux";
 import { setToken } from "@/reduxToolkit/Slices";
+import { SecureStorageKeys } from "@/constants/SecureStorage";
 
 export const useRefreshToken = (refetchKey?: string[]) => {
   const instance = useAuthApi();
@@ -15,8 +16,14 @@ export const useRefreshToken = (refetchKey?: string[]) => {
     mutationFn: instance.refreshTokens,
     onSuccess: async (data) => {
       console.log("success to refresh");
-      await AsyncStorage.setItem("accessToken", data.data.token);
-      await AsyncStorage.setItem("accessToken", data.data.token);
+      await SecureStorage.setItemAsync(
+        SecureStorageKeys.ACCESS_TOKEN,
+        data.data.token
+      );
+      await SecureStorage.setItemAsync(
+        SecureStorageKeys.ACCESS_TOKEN,
+        data.data.token
+      );
       if (refetchKey)
         queryClient.invalidateQueries({ queryKey: refetchKey, exact: true }); // Invalidate queries to refetch data
     },
@@ -24,8 +31,8 @@ export const useRefreshToken = (refetchKey?: string[]) => {
       console.log("failed to refresh");
       if (err.response?.status === 401) {
         //Сброс всех данных по токенам, потому что refresh истёк
-        await AsyncStorage.removeItem("accessToken");
-        await AsyncStorage.removeItem("refreshToken");
+        await SecureStorage.deleteItemAsync(SecureStorageKeys.ACCESS_TOKEN);
+        await SecureStorage.deleteItemAsync(SecureStorageKeys.REFRESH_TOKEN);
         dispatch(setToken(null));
       }
       // else {

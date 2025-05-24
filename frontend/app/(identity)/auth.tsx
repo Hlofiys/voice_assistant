@@ -11,12 +11,14 @@ import { Alert, StyleSheet } from "react-native";
 import { View } from "react-native";
 import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { hasAllValues } from "@/utils/functions/Functions";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStorage from "expo-secure-store";
 import { LoginRequest } from "@/api";
 import { useLogin } from "@/hooks/api/auth/useLogin";
 import { useDispatch } from "react-redux";
 import { setToken } from "@/reduxToolkit/Slices";
 import { useAlert } from "@/context/providers/portal.modal/AlertProvider";
+import { AxiosError } from "axios";
+import { SecureStorageKeys } from "@/constants/SecureStorage";
 
 const auth = () => {
   const [saveMeStatus, setSaveMeStatus] = useState<boolean>(false);
@@ -52,16 +54,25 @@ const auth = () => {
   }, [watch(), errors, hasAllValues]);
 
   const onSubmit: SubmitHandler<LoginRequest> = async (data) => {
-    if (saveMeStatus) {
-      await AsyncStorage.setItem("userAuth", JSON.stringify(data));
-    }
-
-    login(data, {
-      onSuccess: async (data) => {
+    const formData = data;
+    login(formData, {
+      onSuccess: async ({ data }) => {
         console.log("success auth");
-        await AsyncStorage.setItem("accessToken", data.data.token);
-        await AsyncStorage.setItem("refreshToken", data.data.refresh_token);
-        dispatch(setToken(data.data.token));
+        if (saveMeStatus) {
+          await SecureStorage.setItemAsync(
+            SecureStorageKeys.USER_AUTH,
+            JSON.stringify(formData)
+          );
+        } // установка нового логина и пароля при успешной регистрации
+        await SecureStorage.setItemAsync(
+          SecureStorageKeys.ACCESS_TOKEN,
+          data.token
+        );
+        await SecureStorage.setItemAsync(
+          SecureStorageKeys.REFRESH_TOKEN,
+          data.refresh_token
+        );
+        dispatch(setToken(data.token));
         setSaveMeStatus(false);
         reset();
         router.push("/"); //<- pushed to home page
@@ -70,7 +81,8 @@ const auth = () => {
   };
 
   const handlerToAutoComplateSaveData = useCallback(async () => {
-    const savedData = (await AsyncStorage.getItem("userAuth")) ?? "";
+    const savedData =
+      (await SecureStorage.getItemAsync(SecureStorageKeys.USER_AUTH)) ?? "";
     const parsedSavedData: LoginRequest = JSON.parse(savedData);
     if (!!parsedSavedData) {
       showAlert({
@@ -83,6 +95,7 @@ const auth = () => {
           {
             text: "Да",
             onPress: () => {
+              console.log(parsedSavedData);
               setValue("email", parsedSavedData.email);
               setValue("password", parsedSavedData.password);
             },
@@ -91,7 +104,7 @@ const auth = () => {
         ],
       });
     }
-  }, [setValue]);
+  }, [setValue, showAlert]);
 
   useEffect(() => {
     handlerToAutoComplateSaveData();
@@ -148,11 +161,6 @@ const auth = () => {
           onChange={(event) => setSaveMeStatus(event)}
         />
         <ControlPanel>
-          {/* <Button
-            type="text"
-            title="Clean"
-            onPress={()=>{AsyncStorage.clear()}}
-          /> */}
           <Button
             type="primary"
             title="Войти"

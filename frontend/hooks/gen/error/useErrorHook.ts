@@ -1,8 +1,7 @@
-import { RefreshRequest, RegisterRequest } from "@/api";
+import { SecureStorageKeys } from '@/constants/SecureStorage';
 import { useRefreshToken } from "@/hooks/api/auth/useRefreshToken";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStorage from "expo-secure-store";
 import { AxiosError } from "axios";
-// import { useRefreshToken } from "../../b2b/api/hooks/identity/useRefreshToken";
 
 export const useErrorHook = (refetchKey?: string[]) => {
   const { mutateAsync: refresh, isPending } = useRefreshToken(refetchKey);
@@ -11,8 +10,7 @@ export const useErrorHook = (refetchKey?: string[]) => {
     onError: async (error?: AxiosError<any, any>) => {
       console.log(error?.response?.data);
       if (error?.response?.status === 401) {
-        const refreshToken = await AsyncStorage.getItem("refreshToken");
-        console.log(refreshToken, await AsyncStorage.getAllKeys());
+        const refreshToken = await SecureStorage.getItemAsync(SecureStorageKeys.REFRESH_TOKEN);
         if (!!refreshToken) await refresh({ refresh_token: refreshToken });
         // if (callback) callback();
       }

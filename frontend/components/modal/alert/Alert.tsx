@@ -1,5 +1,5 @@
 import { ThemedText } from "@/components/ThemedText";
-import React, { useCallback } from "react";
+import { useCallback, FC, memo } from "react";
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from "react-native";
 
 interface AlertButton {
@@ -16,69 +16,69 @@ interface CustomAlertProps {
   onClose: () => void;
 }
 
-export const Alert: React.FC<CustomAlertProps> = ({
-  visible,
-  title,
-  subtitle,
-  buttons = [{ text: "OK" }],
-  onClose,
-}) => {
-  const handlePress = useCallback(
-    (btn: AlertButton) => {
-      onClose();
-      btn.onPress?.();
-    },
-    [onClose]
-  );
+export const Alert: FC<CustomAlertProps> = memo(
+  ({ visible, title, subtitle, buttons = [{ text: "ДА" }], onClose }) => {
+    const handlePress = useCallback(
+      (btn: AlertButton) => {
+        onClose();
+        btn.onPress?.();
+      },
+      [onClose]
+    );
 
-  return (
-    <Modal
-      transparent
-      animationType="fade"
-      visible={visible}
-      onRequestClose={onClose}
-    >
-      <View style={styles.overlay}>
-        <View style={styles.alertBox}>
-          <View style={styles.header}>
-            <ThemedText style={styles.title}>{title}</ThemedText>
-            {subtitle ? (
-              <ThemedText style={styles.subtitle}>{subtitle}</ThemedText>
-            ) : null}
-          </View>
+    return (
+      <Modal
+        transparent
+        animationType="fade"
+        visible={visible}
+        onRequestClose={onClose}
+      >
+        <View style={styles.overlay}>
+          <View style={styles.alertBox}>
+            <View style={styles.header}>
+              <ThemedText style={styles.title} key={title}>
+                {title}
+              </ThemedText>
+              {subtitle ? (
+                <ThemedText style={styles.subtitle} key={subtitle}>
+                  {subtitle}
+                </ThemedText>
+              ) : null}
+            </View>
 
-          <View style={styles.buttonContainer}>
-            {buttons.map((btn, idx) => (
-              <TouchableOpacity
-                key={idx}
-                onPress={() => handlePress(btn)}
-                style={[
-                  styles.button,
-                  btn.style === "cancel" && styles.cancelButton,
-                  btn.style &&
-                    ["destructive", "default"].includes(btn.style) &&
-                    styles.destructiveButton,
-                ]}
-              >
-                <Text
+            <View style={styles.buttonContainer}>
+              {buttons.map((btn, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => handlePress(btn)}
                   style={[
-                    styles.buttonText,
-                    btn.style === "cancel" && styles.cancelButtonText,
+                    styles.button,
+                    btn.style === "cancel" && styles.cancelButton,
                     btn.style &&
                       ["destructive", "default"].includes(btn.style) &&
-                      styles.destructiveButtonText,
+                      styles.destructiveButton,
                   ]}
                 >
-                  {btn.text}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    style={[
+                      styles.buttonText,
+                      btn.style === "cancel" && styles.cancelButtonText,
+                      btn.style &&
+                        ["destructive", "default"].includes(btn.style) &&
+                        styles.destructiveButtonText,
+                    ]}
+                  >
+                    {btn.text}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         </View>
-      </View>
-    </Modal>
-  );
-};
+      </Modal>
+    );
+  }
+);
 
 const styles = StyleSheet.create({
   overlay: {

@@ -12,15 +12,21 @@ import ControlPanel from "@/components/ControlPanel";
 import Button from "@/components/ui/buttons/Button";
 import { ThemedText } from "@/components/ThemedText";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStorage from "expo-secure-store";
 import { useConfirmEmail } from "@/hooks/api/auth/useConfirmEmail";
 import { useDispatch } from "react-redux";
 import { setToken } from "@/reduxToolkit/Slices";
 import { useAlert } from "@/context/providers/portal.modal/AlertProvider";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useDisableGestureEnabled } from "@/hooks/gen/navigation/useDisableGestureEnabled";
+import { SecureStorageKeys } from "@/constants/SecureStorage";
 
 const confirm = () => {
   const [code, setCode] = useState<string[]>(Array(6).fill(""));
   const [confirmEmail, setConfirmEmail] = useState<string>("");
+
+  useDisableGestureEnabled(); //запрет на навигацию по слайду назад (ios)
+
   const dispatch = useDispatch();
   const router = useRouter();
 
@@ -33,23 +39,30 @@ const confirm = () => {
 
   const confirmationSendHandler = async () => {
     try {
-      const rawData = await AsyncStorage.getItem("confirmData");
+      const rawData = await SecureStorage.getItemAsync(
+        SecureStorageKeys.CONFIRM_DATA
+      );
       const confirmData: { email: string; code: string } | null = rawData
         ? JSON.parse(rawData)
         : null;
-
       if (!!confirmData) {
         const { code, email } = confirmData;
         to_confirm_email(
           { email: email, code: code },
           {
-            onSuccess: async (data) => {
-              await AsyncStorage.setItem("accessToken", data.data.token);
-              await AsyncStorage.setItem(
-                "refreshToken",
-                data.data.refresh_token
+            onSuccess: async ({ data }) => {
+              await SecureStorage.setItemAsync(
+                SecureStorageKeys.ACCESS_TOKEN,
+                data.token
               );
-              dispatch(setToken(data.data.token));
+              await SecureStorage.setItemAsync(
+                SecureStorageKeys.REFRESH_TOKEN,
+                data.refresh_token
+              );
+              dispatch(setToken(data.token));
+              await SecureStorage.deleteItemAsync(
+                SecureStorageKeys.CONFIRM_DATA
+              );
               router.push("/"); // <- push to home
             },
           }
@@ -58,16 +71,19 @@ const confirm = () => {
     } catch (error) {
       console.log(error);
     }
-  }
+  };
 
   const handlerToAutoComplateConfirmCode = useCallback(async () => {
     try {
-      const rawData = await AsyncStorage.getItem("confirmData");
+      const rawData = await SecureStorage.getItemAsync(
+        SecureStorageKeys.CONFIRM_DATA
+      );
       const confirmData: { email: string; code: string } | null = rawData
         ? JSON.parse(rawData)
         : null;
 
-      if (confirmData && confirmData.code && confirmData.email) {
+      if (!!confirmData && confirmData.code && confirmData.email) {
+        console.log(confirmData);
         setConfirmEmail(confirmData.email);
         showAlert({
           title: `Использовать код подтверждения ${confirmData.code}`,
@@ -80,7 +96,6 @@ const confirm = () => {
                   .slice(0, 6)
                   .split("");
                 setCode(finalCode);
-                await AsyncStorage.removeItem("confirmData");
               },
             },
           ],
@@ -89,7 +104,7 @@ const confirm = () => {
     } catch (e) {
       console.warn("Ошибка при чтении confirmData:", e);
     }
-  }, [setCode, setCode]);
+  }, [setCode, setCode, showAlert]);
 
   useEffect(() => {
     handlerToAutoComplateConfirmCode();
@@ -98,6 +113,7 @@ const confirm = () => {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <IdentityLayout
+        hiddenBackBtn
         header="Подтвердите Email"
         subtitle={`Мы отправили письмо на адрес ${confirmEmail}, пожалуйста, введите код ниже.`}
       >

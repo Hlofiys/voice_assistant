@@ -1,4 +1,11 @@
-import { ButtonProps, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  ButtonProps,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import LottieView from "lottie-react-native";
 import Greeting from "@/assets/json/anim/greeting/Greeting.json";
 
@@ -9,39 +16,73 @@ import Button from "@/components/ui/buttons/Button";
 import ControlPanel from "@/components/ControlPanel";
 import { useDispatch, useSelector } from "react-redux";
 import { IInitialState } from "@/reduxToolkit/Interfaces";
-import { useCallback, useMemo } from "react";
 import { useLogout } from "@/hooks/api/auth/useLogout";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStorage from "expo-secure-store";
 import { setToken } from "@/reduxToolkit/Slices";
+import { useAlert } from "@/context/providers/portal.modal/AlertProvider";
+import { SecureStorageKeys } from "@/constants/SecureStorage";
 
 export default function HomeScreen() {
   const router = useRouter();
   const token = useSelector((state: IInitialState) => state.token);
   const dispatch = useDispatch();
-
+  const { showAlert } = useAlert();
   const { mutateAsync: logout, isPending: isPendingLogout } = useLogout();
 
   const handleLogout = useCallback(() => {
     logout(undefined, {
-      onSuccess: async (data) => {
-        await AsyncStorage.removeItem("accessToken");
-        await AsyncStorage.removeItem("refreshToken");
+      onSuccess: async () => {
+        await SecureStorage.deleteItemAsync(SecureStorageKeys.ACCESS_TOKEN);
+        await SecureStorage.deleteItemAsync(SecureStorageKeys.REFRESH_TOKEN);
         dispatch(setToken(null));
       },
     });
-  }, [logout, setToken, dispatch]);
+  }, [logout, dispatch]);
+
+  const fetchConfirmDataAndAlert = useCallback(async () => {
+    try {
+      const rawData = await SecureStorage.getItemAsync(
+        SecureStorageKeys.CONFIRM_DATA
+      );
+      const confirmData: { email: string; code: string } | null = rawData
+        ? JSON.parse(rawData)
+        : null;
+
+      if (confirmData && confirmData.code && confirmData.email) {
+        showAlert({
+          title: `Вы не прошли регистрацию до конца`,
+          subtitle: "Перейти к завершению регистрации",
+          buttons: [
+            {
+              text: "Да",
+              onPress: () => {
+                router.push("/(identity)/confirm");
+              },
+            },
+          ],
+        });
+      }
+    } catch (e) {
+      console.warn("Ошибка при чтении confirmData:", e);
+    }
+  }, [router, showAlert]);
+
+  useEffect(() => {
+    fetchConfirmDataAndAlert();
+  }, []);
 
   const buttonProps = useMemo<ButtonProps>(() => {
-    return !!token
-      ? {
-          title: "Начать",
-          onPress: () => router.push("/(main)/record"),
-        }
-      : {
-          title: "Войти",
-          onPress: () => router.push("/auth"),
-          // onPress: () => router.push("/(identity)/setpassword"),
-        };
+    if (token) {
+      return {
+        title: "Начать",
+        onPress: () => router.push("/(main)/record"),
+      };
+    }
+
+    return {
+      title: "Войти",
+      onPress: () => router.push("/auth"),
+    };
   }, [token]);
 
   return (
@@ -62,25 +103,26 @@ export default function HomeScreen() {
           </ThemedText>
         </ThemedView>
       </View>
-      <ControlPanel gap={(token && 10) || undefined}>
+
+      <ControlPanel gap={token ? 10 : undefined}>
         <Button type="primary" disabled={isPendingLogout} {...buttonProps} />
-        {(!token && (
+
+        {token ? (
+          <Button
+            onPress={handleLogout}
+            type="text"
+            isLoading={isPendingLogout}
+            loadingIndicatorColor="red"
+          >
+            <Text style={{ color: "red" }}>Выйти из аккаунта</Text>
+          </Button>
+        ) : (
           <ThemedText>
             Нет учетной записи?{" "}
             <ThemedText type="link" onPress={() => router.push("/register")}>
               Зарегистрируйтесь
             </ThemedText>
           </ThemedText>
-        )) || (
-          <Button
-            onPress={handleLogout}
-            type="text"
-            isLoading={isPendingLogout}
-            loadingIndicatorColor="red"
-            // style={{ borderColor: 'red', borderWidth: 1 }}
-          >
-            <Text style={{ color: "red" }}>Выйти из аккаунта</Text>
-          </Button>
         )}
       </ControlPanel>
     </View>
@@ -113,7 +155,7 @@ const styles = StyleSheet.create({
   },
   regularText: {
     fontSize: 15,
-    color: "#444", // или используйте тему
+    color: "#444",
     textAlign: "center",
   },
 });

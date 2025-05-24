@@ -1,14 +1,15 @@
 // Slices.ts
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStorage from "expo-secure-store";
 import { IInitialState } from "./Interfaces";
+import { SecureStorageKeys } from '@/constants/SecureStorage';
 
 export const initialState: IInitialState = {
   token: null,
 };
 
 export const loadToken = createAsyncThunk("auth/loadToken", async () => {
-  const token = await AsyncStorage.getItem("accessToken");
+  const token = await SecureStorage.getItemAsync(SecureStorageKeys.ACCESS_TOKEN);
   return token;
 });
 

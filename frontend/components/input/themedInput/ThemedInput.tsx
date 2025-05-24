@@ -71,6 +71,7 @@ const ThemedInput: FC<TThemedInputProps> = (props) => {
           placeholderTextColor={"#BABABA"}
           scrollEnabled={false}
           secureTextEntry={isSecurity}
+          onBlur={inputProps.onBlur}
           {...inputProps}
         />
       </View>

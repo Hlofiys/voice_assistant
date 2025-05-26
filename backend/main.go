@@ -141,6 +141,7 @@ func main() {
 	server := api.NewServer(*authenticator, genaiClient, genaiClientEmbs, chromaClient, config.ChromaCollectionName, db)
 
 	openapi3filter.RegisterBodyDecoder("audio/mp4", openapi3filter.FileBodyDecoder)
+	openapi3filter.RegisterBodyDecoder("audio/x-m4a", openapi3filter.FileBodyDecoder)
 	validator := middleWare.OapiRequestValidatorWithOptions(doc, validatorOptions)
 
 	handler := api.HandlerFromMux(&server, httpHandler)

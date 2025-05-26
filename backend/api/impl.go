@@ -638,7 +638,8 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[Chat] Received chat request with form data: %v", r.MultipartForm.Value)
+	log.Printf("[Chat] Received chat request with form data: %v", r.MultipartForm.File["audio"][0].Filename)
+	log.Printf("[Chat] Received chat request with form data: %v", r.FormValue("audio"))
 
 	audioFile, fileHeader, err := r.FormFile("audio")
 	if err != nil {

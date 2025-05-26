@@ -4,14 +4,15 @@ import { useAuthApi } from "./useAuthApi.instance";
 import { AxiosError } from "axios";
 import { subscribe } from "expo-router/build/link/linking";
 import { useAlert } from "@/context/providers/portal.modal/AlertProvider";
+import AuthService from '@/services/auth/Auth.service';
 
 export const useResetPassword = () => {
   const { onError } = useErrorHook();
-  const instance = useAuthApi();
+  // const instance = useAuthApi();
   const { showAlert } = useAlert();
   return useMutation({
     mutationKey: ["resetPassword"],
-    mutationFn: instance.requestPasswordResetCode,
+    mutationFn: AuthService.requestPasswordResetCode,
     onError: (err: AxiosError<any, any>) => {
       if (err.response?.status === 404) {
         showAlert({

@@ -106,6 +106,7 @@ export default function HomeScreen() {
 
       <ControlPanel gap={token ? 10 : undefined}>
         <Button type="primary" disabled={isPendingLogout} {...buttonProps} />
+        <Button type="primary" title='123' onPress={async ()=> console.log(await SecureStorage.getItemAsync(SecureStorageKeys.ACCESS_TOKEN), " ", token)} />
 
         {token ? (
           <Button

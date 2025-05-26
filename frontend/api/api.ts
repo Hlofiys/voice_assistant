@@ -1013,6 +1013,7 @@ export class DefaultApi extends BaseAPI {
      * @memberof DefaultApi
      */
     public chat(audio?: File, options?: RawAxiosRequestConfig) {
+        console.log('token to send: ', this.configuration?.accessToken)
         return DefaultApiFp(this.configuration).chat(audio, options).then((request) => request(this.axios, this.basePath));
     }
 }

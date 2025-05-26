@@ -72,6 +72,7 @@ const auth = () => {
           SecureStorageKeys.REFRESH_TOKEN,
           data.refresh_token
         );
+        console.log(`access: ${data.token}\nrefresh: ${data.refresh_token}`);
         dispatch(setToken(data.token));
         setSaveMeStatus(false);
         reset();

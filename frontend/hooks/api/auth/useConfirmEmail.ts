@@ -1,17 +1,18 @@
 import {
-  AuthenticationApi,
+  // AuthenticationApi,
   ConfirmEmailRequest,
   ConfirmEmailResponse,
 } from "@/api";
-import { useAxiosConfiguration } from "@/config/api.config/ApiConfig";
+// import { useAxiosConfiguration } from "@/config/api.config/ApiConfig";
 import { useErrorHook } from "@/hooks/gen/error/useErrorHook";
+import AuthService from "@/services/auth/Auth.service";
 import { useMutation } from "@tanstack/react-query";
 import { AxiosResponse } from "axios";
 
 export const useConfirmEmail = () => {
   const { onError } = useErrorHook();
-  const config = useAxiosConfiguration();
-  const instance = new AuthenticationApi(config);
+  // const config = useAxiosConfiguration();
+  // const instance = new AuthenticationApi(config);
 
   return useMutation<
     AxiosResponse<ConfirmEmailResponse>,
@@ -19,7 +20,7 @@ export const useConfirmEmail = () => {
     ConfirmEmailRequest
   >({
     mutationKey: ["confirmEmail"],
-    mutationFn: instance.confirmEmail,
+    mutationFn: AuthService.confirmEmail,
     onError: (err) => onError(err as any),
   });
 };

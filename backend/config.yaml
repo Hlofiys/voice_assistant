@@ -6,7 +6,7 @@ POSTGRES_DB: assistant
 SERVER_ADDRESS: "8080"
 JWT_ISSUER: assistant-auth-api
 JWT_AUDIENCE: assistant-client
-CHROMA_BASE_URL: http://chromadb:8000
+CHROMA_BASE_URL: http://192.168.1.34:8001
 CHROMA_COLLECTION_NAME: chatbot-pharmacies
 GOOGLE_EMBEDDING_MODEL_NAME: text-embedding-004
 GOOGLE_CHAT_MODEL_NAME: gemini-2.0-flash-lite

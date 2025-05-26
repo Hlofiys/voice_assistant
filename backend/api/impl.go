@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 	db "voice_assistant/db/sqlc"
 	"voice_assistant/tools"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/texttheater/golang-levenshtein/levenshtein"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/genai"
 )
@@ -628,6 +630,25 @@ func generateNumericCode(length int) (string, error) {
 	return string(buffer), nil
 }
 
+// ---------------- utils ----------------
+func normalize(s string) string {
+	// убираем регистр, спец. символы, пробелы
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+func fuzzyEqual(a, b string, maxDist int) bool {
+	return levenshtein.DistanceForStrings(
+		[]rune(normalize(a)), []rune(normalize(b)),
+		levenshtein.DefaultOptions) <= maxDist
+}
+
+// ---------------------------------------
+
 func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -824,81 +845,164 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"message": "failed to access pharmacy database: `+err.Error()+`"}`, http.StatusInternalServerError)
 			return
 		}
-
-		var queryOptions []chromago.CollectionQueryOption
-		queryOptions = append(queryOptions, chromago.WithQueryTexts(userQuery))
-		queryOptions = append(queryOptions, chromago.WithNResults(10))
-
-		var filterClauses []chromago.WhereClause
-		if extractedParamsFromTool.PharmacyName != "" {
-			filterClauses = append(filterClauses, chromago.EqString("pharmacy_name", strings.TrimPrefix(extractedParamsFromTool.PharmacyName, "Аптека ")))
+		// 1. строим векторный текст = «Минск Жудро 16 <имя> номер 30»
+		var queryTextBuilder strings.Builder
+		ep := extractedParamsFromTool
+		if ep.City != "" {
+			queryTextBuilder.WriteString(ep.City + " ")
 		}
-		if extractedParamsFromTool.PharmacyNumber != "" {
-			filterClauses = append(filterClauses, chromago.EqString("pharmacy_number", strings.TrimPrefix(extractedParamsFromTool.PharmacyNumber, "Номер аптеки ")))
+		if ep.Street != "" {
+			queryTextBuilder.WriteString(ep.Street + " ")
 		}
-		if extractedParamsFromTool.City != "" {
-			filterClauses = append(filterClauses, chromago.EqString("city", strings.TrimPrefix(extractedParamsFromTool.City, "город ")))
+		if ep.HouseNumber != "" {
+			queryTextBuilder.WriteString(ep.HouseNumber + " ")
 		}
-		if extractedParamsFromTool.Street != "" {
-			filterClauses = append(filterClauses, chromago.EqString("street", strings.TrimPrefix(extractedParamsFromTool.Street, "улица ")))
+		if ep.PharmacyName != "" {
+			queryTextBuilder.WriteString(ep.PharmacyName + " ")
 		}
-		if extractedParamsFromTool.HouseNumber != "" {
-			filterClauses = append(filterClauses, chromago.EqString("house_number", extractedParamsFromTool.HouseNumber))
+		if ep.PharmacyNumber != "" {
+			queryTextBuilder.WriteString("номер " + ep.PharmacyNumber)
 		}
 
-		if len(filterClauses) > 0 {
-			var finalFilter chromago.WhereFilter
-			if len(filterClauses) == 1 {
-				finalFilter = filterClauses[0]
-			} else {
-				finalFilter = chromago.Or(filterClauses...)
+		// 2. строгий AND-фильтр по «географии»
+		var strictClauses []chromago.WhereClause
+		if ep.City != "" {
+			strictClauses = append(strictClauses, chromago.EqString("city", ep.City))
+		}
+		if ep.Street != "" {
+			strictClauses = append(strictClauses, chromago.EqString("street", ep.Street))
+		}
+		if ep.HouseNumber != "" {
+			strictClauses = append(strictClauses, chromago.EqString("house_number", ep.HouseNumber))
+		}
+		if ep.PharmacyName != "" {
+			strictClauses = append(strictClauses, chromago.EqString("pharmacy_name", ep.PharmacyName))
+		}
+		if ep.PharmacyNumber != "" {
+			strictClauses = append(strictClauses, chromago.EqString("pharmacy_number", ep.PharmacyNumber))
+		}
+
+		queryOpts := []chromago.CollectionQueryOption{
+			chromago.WithQueryTexts(strings.TrimSpace(queryTextBuilder.String())),
+			chromago.WithNResults(10),
+		}
+		if len(strictClauses) > 0 {
+			strictFilter := strictClauses[0]
+			if len(strictClauses) > 1 {
+				strictFilter = chromago.And(strictClauses...)
 			}
-			queryOptions = append(queryOptions, chromago.WithWhereQuery(finalFilter))
-		} else {
-			log.Println("[Chat] No specific metadata extracted by LLM for filtering, performing broad semantic search.")
+			queryOpts = append(queryOpts, chromago.WithWhereQuery(strictFilter))
 		}
-		queryOptions = append(queryOptions, chromago.WithIncludeQuery(chromago.IncludeDocuments, chromago.IncludeMetadatas))
+		queryOpts = append(queryOpts, chromago.WithIncludeQuery(chromago.IncludeDocuments, chromago.IncludeMetadatas))
 
-		retrievedDocs, err := collection.Query(ctx, queryOptions...)
+		retrievedDocs, err := collection.Query(ctx, queryOpts...)
 		if err != nil {
 			log.Printf("[Chat] Error querying ChromaDB: %v", err)
 			http.Error(w, `{"message": "failed to query pharmacy database: `+err.Error()+`"}`, http.StatusInternalServerError)
 			return
 		}
 
-		var ragContextBuilder strings.Builder
-		if retrievedDocs.CountGroups() > 0 {
-			documentGroups := retrievedDocs.GetDocumentsGroups()
-			if len(documentGroups) > 0 {
-				hasContent := false
-				ragContextBuilder.WriteString("Найденная информация:\n")
-				docCounter := 1
-				for _, group := range documentGroups {
-					for _, doc := range group {
-						ragContextBuilder.WriteString(fmt.Sprintf("%d. %s\n", docCounter, doc.ContentString()))
-						docCounter++
-						hasContent = true
-						if docCounter > 5 {
-							break
-						}
-					}
-					if docCounter > 5 {
-						break
+		// 3. fallback, если строгий поиск ничего не вернул
+		if len(retrievedDocs.GetDocumentsGroups()[0]) == 0 {
+			log.Println("[Chat] Strict AND-поиск пуст – делаем fallback OR.")
+			var looseClauses []chromago.WhereClause
+			if ep.PharmacyName != "" {
+				looseClauses = append(looseClauses, chromago.EqString("pharmacy_name", ep.PharmacyName))
+			}
+			if ep.PharmacyNumber != "" {
+				looseClauses = append(looseClauses, chromago.EqString("pharmacy_number", ep.PharmacyNumber))
+			}
+			if ep.City != "" {
+				looseClauses = append(looseClauses, chromago.EqString("city", ep.City))
+			}
+			if ep.Street != "" {
+				looseClauses = append(looseClauses, chromago.EqString("street", ep.Street))
+			}
+			if ep.HouseNumber != "" {
+				looseClauses = append(looseClauses, chromago.EqString("house_number", ep.HouseNumber))
+			}
+
+			// тот же queryText, но OR-фильтр
+			fallbackOpts := []chromago.CollectionQueryOption{
+				chromago.WithQueryTexts(strings.TrimSpace(queryTextBuilder.String())),
+				chromago.WithNResults(10),
+				chromago.WithIncludeQuery(chromago.IncludeDocuments, chromago.IncludeMetadatas),
+			}
+			if len(looseClauses) > 0 {
+				fallbackOpts = append(fallbackOpts, chromago.WithWhereQuery(chromago.Or(looseClauses...)))
+			}
+			retrievedDocs, err = collection.Query(ctx, fallbackOpts...)
+			if err != nil {
+				log.Printf("[Chat] Error querying ChromaDB fallback: %v", err)
+				http.Error(w, `{"message": "failed to query pharmacy database fallback: `+err.Error()+`"}`, http.StatusInternalServerError)
+				return
+			}
+		}
+
+		// 4. post-фаззи-фильтр по имени/номеру (≤2 ошибки)
+		var finalDocs []chromago.Document
+		docsGroups := retrievedDocs.GetDocumentsGroups()
+		metaGroups := retrievedDocs.GetMetadatasGroups()
+		for gi, metaGroup := range metaGroups {
+			docGroup := docsGroups[gi]
+			for di, meta := range metaGroup {
+				good := true
+				if ep.PharmacyName != "" {
+					meta, _ := meta.GetString("pharmacy_name")
+					if !fuzzyEqual(meta, ep.PharmacyName, 4) {
+						good = false
 					}
 				}
-				if !hasContent {
-					ragContextBuilder.Reset()
+				if good && ep.PharmacyNumber != "" {
+					meta, _ := meta.GetString("pharmacy_number")
+					if !fuzzyEqual(meta, ep.PharmacyNumber, 1) {
+						good = false
+					}
+				}
+				if good && ep.City != "" {
+					meta, _ := meta.GetString("city")
+					if !fuzzyEqual(meta, ep.City, 2) {
+						good = false
+					}
+				}
+				if good && ep.Street != "" {
+					meta, _ := meta.GetString("street")
+					if !fuzzyEqual(meta, ep.Street, 2) {
+						good = false
+					}
+				}
+				if good && ep.HouseNumber != "" {
+					meta, _ := meta.GetString("house_number")
+					if !fuzzyEqual(meta, ep.HouseNumber, 1) {
+						good = false
+					}
+				}
+				if good {
+					finalDocs = append(finalDocs, docGroup[di])
 				}
 			}
 		}
-		if ragContextBuilder.Len() == 0 {
-			log.Println("[Chat] No relevant documents retrieved from ChromaDB or documents were empty.")
-			ragContextBuilder.WriteString("Информация по запросу не найдена в базе данных.")
+
+		var rag strings.Builder
+		if len(finalDocs) == 0 {
+			rag.WriteString("Информация по запросу не найдена в базе данных.")
+		} else {
+			rag.WriteString("Найденная информация:\n")
+			for i, d := range finalDocs {
+				rag.WriteString(fmt.Sprintf("%d. %s\n", i+1, d.ContentString()))
+				if i == 4 {
+					break
+				} // максимум 5 записей
+			}
 		}
-		log.Printf("[Chat] RAG Context for LLM (call 2): %s", ragContextBuilder.String())
+		if rag.Len() == 0 {
+			log.Println("[Chat] No relevant documents retrieved from ChromaDB or documents were empty.")
+			rag.WriteString("Информация по запросу не найдена в базе данных.")
+		}
+		log.Printf("[Chat] RAG Context for LLM (call 2): %s", rag.String())
 		// --- End ChromaDB query ---
 
-		funcResponseData := map[string]any{"search_results_summary": ragContextBuilder.String()}
+		funcResponseData := map[string]any{"search_results_summary": rag.String()}
 		fnResponse := genai.FunctionResponse{Name: functionCallToExecute.Name, Response: funcResponseData}
 		toolResponsePart := genai.Part{FunctionResponse: &fnResponse}
 

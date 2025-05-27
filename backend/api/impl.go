@@ -9,9 +9,11 @@ import (
 	"io"
 	"log"
 	"math/big"
+	mathrand "math/rand"
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	db "voice_assistant/db/sqlc"
@@ -38,6 +40,13 @@ type ExtractedQueryParams struct {
 	HouseNumber    string `json:"house_number"`
 }
 
+type ChatSession struct {
+	ID        string
+	History   []*genai.Content
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type Server struct {
 	jwtAuth              tools.Authenticator
 	genaiClient          *genai.Client
@@ -46,9 +55,11 @@ type Server struct {
 	chromaCollectionName string
 	ef                   *g.GeminiEmbeddingFunction
 	db                   *db.Queries
+	chatSessions         map[string]*ChatSession
+	sessionMutex         sync.RWMutex
 }
 
-func NewServer(jwtAuth tools.Authenticator, client *genai.Client, clientEmbs *genaiembs.Client, chromaDBClient chromago.Client, chromaCollection string, db *db.Queries) Server {
+func NewServer(jwtAuth tools.Authenticator, client *genai.Client, clientEmbs *genaiembs.Client, chromaDBClient chromago.Client, chromaCollection string, db *db.Queries) *Server {
 	chatModelName := "gemini-2.0-flash"
 
 	ef, err := g.NewGeminiEmbeddingFunction(g.WithEnvAPIKey(), g.WithDefaultModel("text-embedding-004"), g.WithClient(clientEmbs))
@@ -57,7 +68,7 @@ func NewServer(jwtAuth tools.Authenticator, client *genai.Client, clientEmbs *ge
 		log.Fatalf("Error creating Gemini embedding function: %s \n", err)
 	}
 
-	return Server{
+	s := &Server{
 		jwtAuth:              jwtAuth,
 		genaiClient:          client,
 		chatModel:            chatModelName,
@@ -65,7 +76,12 @@ func NewServer(jwtAuth tools.Authenticator, client *genai.Client, clientEmbs *ge
 		chromaCollectionName: chromaCollection,
 		ef:                   ef,
 		db:                   db,
+		chatSessions:         make(map[string]*ChatSession),
 	}
+
+	s.cleanupSessions()
+
+	return s
 }
 
 func (s *Server) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
@@ -647,6 +663,42 @@ func fuzzyEqual(a, b string, maxDist int) bool {
 		levenshtein.DefaultOptions) <= maxDist
 }
 
+func (s *Server) getOrCreateSession(sessionID string) *ChatSession {
+	s.sessionMutex.Lock()
+	defer s.sessionMutex.Unlock()
+
+	if session, exists := s.chatSessions[sessionID]; exists {
+		session.UpdatedAt = time.Now()
+		return session
+	}
+
+	session := &ChatSession{
+		ID:        sessionID,
+		History:   make([]*genai.Content, 0),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	s.chatSessions[sessionID] = session
+	return session
+}
+
+// Clean up old sessions periodically
+func (s *Server) cleanupSessions() {
+	ticker := time.NewTicker(30 * time.Minute)
+	go func() {
+		for range ticker.C {
+			s.sessionMutex.Lock()
+			now := time.Now()
+			for id, session := range s.chatSessions {
+				if now.Sub(session.UpdatedAt) > 1*time.Hour {
+					delete(s.chatSessions, id)
+				}
+			}
+			s.sessionMutex.Unlock()
+		}
+	}()
+}
+
 // ---------------------------------------
 
 func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
@@ -659,8 +711,14 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[Chat] Received chat request with form data: %v", r.MultipartForm.File["audio"][0].Filename)
-	log.Printf("[Chat] Received chat request with form data: %v", r.MultipartForm.File["audio"][0].Size)
+	sessionID := r.FormValue("session_id")
+	if sessionID == "" {
+		sessionID = generateSessionID() // implement this to generate unique IDs
+	}
+
+	session := s.getOrCreateSession(sessionID)
+
+	log.Printf("[Chat] Session ID: %s, History length: %d", sessionID, len(session.History))
 
 	audioFile, fileHeader, err := r.FormFile("audio")
 	if err != nil {
@@ -721,7 +779,7 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 	// Start a new chat session using s.genaiClient.Chats.Create
 	// Pass chatConfig here to enable tools for this session.
 	// The 'history' argument can be nil for a new chat.
-	chatSession, err := s.genaiClient.Chats.Create(ctx, s.chatModel, chatConfig, nil)
+	chatSession, err := s.genaiClient.Chats.Create(ctx, s.chatModel, chatConfig, session.History)
 	if err != nil {
 		log.Printf("[Chat] Error creating chat session: %v", err)
 		http.Error(w, `{"message": "failed to initialize AI chat: `+err.Error()+`"}`, http.StatusInternalServerError)
@@ -742,27 +800,28 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 • Исключение одно — если запрос явно не о поиске (например: «Я работаю в аптеке» или «Я живу возле аптеки») и при этом пользователь не просит никакой информации о ней.
 3. После получения аудиозапроса:  
    a) Выполни точную транскрипцию на русском.  
-      • Числа пиши цифрами.  
-      • Названия городов — в именительном падеже.  
-      • Никаких лишних комментариев.  
+	  • Числа пиши цифрами.  
+	  • Названия городов — в именительном падеже.  
+	  • Никаких лишних комментариев.  
    б) Определи, связан ли запрос с поиском аптек.  
-      • Если нет — ответь по существу без вызова инструментов.  
+	  • Если нет — ответь по существу без вызова инструментов.  
 
 4. Если запрос связан с аптеками:  
    a) Извлеки из транскрипции параметры (если явно названы):  
-      pharmacy_name, pharmacy_number, city, street, house_number.  
-      • Не добавляй слова «аптека», «город», «улица» и т.д.  
+	  pharmacy_name, pharmacy_number, city, street, house_number.  
+	  • Не добавляй слова «аптека», «город», «улица» и т.д.  
    b) Вызови инструмент find_pharmacies, передав:  
-      • user_query_transcription — полную транскрипцию;  
-      • найденные параметры (пустые не передавай).  
+	  • user_query_transcription — полную транскрипцию;  
+	  • найденные параметры (пустые не передавай).  
+   c) ВАЖНО: Если это продолжение диалога, учитывай контекст предыдущих сообщений. Если пользователь отвечает на твой уточняющий вопрос, объедини новую информацию с ранее упомянутыми параметрами.
 
 5. Обработка результатов find_pharmacies:  
    a) Если по совокупности параметров можно однозначно определить одну аптеку (уникальное сочетание), выдай краткий ответ в формате:  
-      «Аптека <pharmacy_name> номер <pharmacy_number> находится в городе <city>, <street>, дом <house_number>. Телефон: <phone>.»  
-      • Пропускай номер аптеки, улицу или дом, если их нет в данных.  
-      • Используй ровно одну точку-паузу между частями, без переносов строк.  
+	  «Аптека <pharmacy_name> номер <pharmacy_number> находится в городе <city>, <street>, дом <house_number>. Телефон: <phone>.»  
+	  • Пропускай номер аптеки, улицу или дом, если их нет в данных.  
+	  • Используй ровно одну точку-паузу между частями, без переносов строк.  
    b) Если данных недостаточно и нашлось несколько кандидатов, НЕ перечисляй их. Задай короткий уточняющий вопрос, например:  
-      «Уточните, пожалуйста, улицу или номер аптеки.»  
+	  «Уточните, пожалуйста, улицу или номер аптеки.»  
 5-bis. Определение уникальности
 • Считай аптеку уникально найденной, если среди результатов RAG есть ХОТЯ БЫ ОДНА запись, совпадающая с каждым из явно указанных пользователем параметров (city, pharmacy_number и/или pharmacy_name) после нормализации.
 • Нормализация имени аптеки:  
@@ -785,6 +844,18 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"message": "failed to process audio: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
+
+	// Add user message to history
+	// Convert []genai.Part to []*genai.Part
+	userPartsPtrs := make([]*genai.Part, len(initialUserParts))
+	for i := range initialUserParts {
+		userPartsPtrs[i] = &initialUserParts[i]
+	}
+	userContent := &genai.Content{
+		Role:  "user",
+		Parts: userPartsPtrs,
+	}
+	session.History = append(session.History, userContent)
 
 	// 5. Process LLM's first response
 	if resp1 == nil || len(resp1.Candidates) == 0 || resp1.Candidates[0].Content == nil {
@@ -1022,8 +1093,35 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 			assistantResponseText = resp2.Text()
 		}
 	} else {
-		log.Println("[Chat] LLM did not request a function call. Using its direct textual response from first call.")
-		assistantResponseText = resp1.Text()
+		log.Println("[Chat] LLM did not request a function call. Trying to extract transcription and send to LLM for answer.")
+		// Try to extract transcription from the first response
+		var extractedTranscription string
+		if llmFirstResponseCandidate.Content != nil {
+			for _, part := range llmFirstResponseCandidate.Content.Parts {
+				if part.Text != "" {
+					extractedTranscription = part.Text
+					break
+				}
+			}
+		}
+		if extractedTranscription != "" {
+			log.Printf("[Chat] Sending extracted transcription to LLM for answer: %s", extractedTranscription)
+			transcriptionPart := genai.Part{Text: extractedTranscription}
+			respTrans, err := chatSession.SendMessage(ctx, transcriptionPart)
+			if err != nil {
+				log.Printf("[Chat] Error sending transcription to LLM: %v", err)
+				assistantResponseText = extractedTranscription // fallback
+			} else if respTrans != nil && len(respTrans.Candidates) > 0 && respTrans.Candidates[0].Content != nil && len(respTrans.Candidates[0].Content.Parts) > 0 {
+				assistantResponseText = respTrans.Text()
+				userQuery = extractedTranscription
+			} else {
+				log.Println("[Chat] LLM response to transcription is empty or invalid.")
+				assistantResponseText = extractedTranscription // fallback
+			}
+		} else {
+			log.Println("[Chat] No transcription found in LLM response, using direct textual response.")
+			assistantResponseText = resp1.Text()
+		}
 	}
 
 	// Final response handling
@@ -1050,10 +1148,34 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 	re := regexp.MustCompile(`[^\p{L}\p{N}\s.,!?":\-]`)
 	assistantResponseText = re.ReplaceAllString(assistantResponseText, "")
 
+	assistantContent := &genai.Content{
+		Role:  "model",
+		Parts: []*genai.Part{{Text: assistantResponseText}},
+	}
+	session.History = append(session.History, assistantContent)
+
+	response := map[string]string{
+		"transcription":      userQuery,
+		"assistant_response": assistantResponseText,
+		"session_id":         sessionID,
+	}
+
 	log.Printf("[Chat] Final assistant response: %s", assistantResponseText)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(map[string]string{"text": assistantResponseText}); err != nil {
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("[Chat] Error encoding final response: %v", err)
 	}
+}
+
+func generateSessionID() string {
+	return fmt.Sprintf("session_%d_%s", time.Now().Unix(), generateRandomString(8))
+}
+func generateRandomString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[mathrand.Intn(len(charset))]
+	}
+	return string(b)
 }

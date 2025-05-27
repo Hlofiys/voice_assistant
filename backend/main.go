@@ -144,7 +144,7 @@ func main() {
 	openapi3filter.RegisterBodyDecoder("audio/x-m4a", openapi3filter.FileBodyDecoder)
 	validator := middleWare.OapiRequestValidatorWithOptions(doc, validatorOptions)
 
-	handler := api.HandlerFromMux(&server, httpHandler)
+	handler := api.HandlerFromMux(server, httpHandler)
 
 	handler = validator(handler)
 

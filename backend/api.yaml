@@ -457,6 +457,9 @@ paths:
                 audio:
                   type: string
                   format: binary
+                session_id:
+                  type: string
+                  description: Unique session identifier for the conversation
       responses:
         "200":
           description: Response from voice assistant
@@ -465,8 +468,16 @@ paths:
               schema:
                 type: object
                 properties:
-                  text:
+                  transcription:
                     type: string
+                    description: Transcription of the audio input
+                  assistant_response:
+                    type: string
+                    description: Response from the voice assistant
+                  session_id:
+                    type: string
+                    description: Unique session identifier for the conversation
+
         "400":
           description: Invalid request
           content:

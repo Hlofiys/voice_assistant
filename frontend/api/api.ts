@@ -30,11 +30,23 @@ import { BASE_PATH, COLLECTION_FORMATS, BaseAPI, RequiredError, operationServerM
  */
 export interface Chat200Response {
     /**
-     * 
+     * Transcription of the audio input
      * @type {string}
      * @memberof Chat200Response
      */
-    'text'?: string;
+    'transcription'?: string;
+    /**
+     * Response from the voice assistant
+     * @type {string}
+     * @memberof Chat200Response
+     */
+    'assistant_response'?: string;
+    /**
+     * Unique session identifier for the conversation
+     * @type {string}
+     * @memberof Chat200Response
+     */
+    'session_id'?: string;
 }
 /**
  * 
@@ -912,10 +924,11 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
          * 
          * @summary Chat with voice assistant (send audio, get text)
          * @param {File} [audio] 
+         * @param {string} [sessionId] Unique session identifier for the conversation
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        chat: async (audio?: File, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        chat: async (audio?: File, sessionId?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             const localVarPath = `/api/chat`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -936,6 +949,10 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
 
             if (audio !== undefined) { 
                 localVarFormParams.append('audio', audio as any);
+            }
+    
+            if (sessionId !== undefined) { 
+                localVarFormParams.append('session_id', sessionId as any);
             }
     
     
@@ -965,11 +982,12 @@ export const DefaultApiFp = function(configuration?: Configuration) {
          * 
          * @summary Chat with voice assistant (send audio, get text)
          * @param {File} [audio] 
+         * @param {string} [sessionId] Unique session identifier for the conversation
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async chat(audio?: File, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Chat200Response>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.chat(audio, options);
+        async chat(audio?: File, sessionId?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Chat200Response>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.chat(audio, sessionId, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.chat']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -988,11 +1006,12 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          * 
          * @summary Chat with voice assistant (send audio, get text)
          * @param {File} [audio] 
+         * @param {string} [sessionId] Unique session identifier for the conversation
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        chat(audio?: File, options?: RawAxiosRequestConfig): AxiosPromise<Chat200Response> {
-            return localVarFp.chat(audio, options).then((request) => request(axios, basePath));
+        chat(audio?: File, sessionId?: string, options?: RawAxiosRequestConfig): AxiosPromise<Chat200Response> {
+            return localVarFp.chat(audio, sessionId, options).then((request) => request(axios, basePath));
         },
     };
 };
@@ -1008,13 +1027,13 @@ export class DefaultApi extends BaseAPI {
      * 
      * @summary Chat with voice assistant (send audio, get text)
      * @param {File} [audio] 
+     * @param {string} [sessionId] Unique session identifier for the conversation
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      * @memberof DefaultApi
      */
-    public chat(audio?: File, options?: RawAxiosRequestConfig) {
-        console.log('token to send: ', this.configuration?.accessToken)
-        return DefaultApiFp(this.configuration).chat(audio, options).then((request) => request(this.axios, this.basePath));
+    public chat(audio?: File, sessionId?: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).chat(audio, sessionId, options).then((request) => request(this.axios, this.basePath));
     }
 }
 

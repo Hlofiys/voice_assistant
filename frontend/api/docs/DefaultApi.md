@@ -22,9 +22,11 @@ const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
 let audio: File; // (optional) (default to undefined)
+let sessionId: string; //Unique session identifier for the conversation (optional) (default to undefined)
 
 const { status, data } = await apiInstance.chat(
-    audio
+    audio,
+    sessionId
 );
 ```
 
@@ -33,6 +35,7 @@ const { status, data } = await apiInstance.chat(
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
 | **audio** | [**File**] |  | (optional) defaults to undefined|
+| **sessionId** | [**string**] | Unique session identifier for the conversation | (optional) defaults to undefined|
 
 
 ### Return type

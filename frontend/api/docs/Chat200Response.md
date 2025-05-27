@@ -5,7 +5,9 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**text** | **string** |  | [optional] [default to undefined]
+**transcription** | **string** | Transcription of the audio input | [optional] [default to undefined]
+**assistant_response** | **string** | Response from the voice assistant | [optional] [default to undefined]
+**session_id** | **string** | Unique session identifier for the conversation | [optional] [default to undefined]
 
 ## Example
 
@@ -13,7 +15,9 @@ Name | Type | Description | Notes
 import { Chat200Response } from './api';
 
 const instance: Chat200Response = {
-    text,
+    transcription,
+    assistant_response,
+    session_id,
 };
 ```
 

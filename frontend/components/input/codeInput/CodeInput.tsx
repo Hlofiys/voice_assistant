@@ -15,7 +15,6 @@ import {
   Keyboard,
   NativeSyntheticEvent,
   TextInputFocusEventData,
-  TouchableOpacity,
 } from "react-native";
 
 const CODE_LENGTH = 6;
@@ -106,11 +105,9 @@ const CodeInput: FC<ICodeInputProps> = (props) => {
 
   return (
     <View style={[styles.container, { gap }]}>
-      <TouchableOpacity>
-        <ThemedText type="subtitle" style={styles.label}>
-          Введите код
-        </ThemedText>
-      </TouchableOpacity>
+      <ThemedText type="subtitle" style={styles.label}>
+        Введите код
+      </ThemedText>
 
       <View style={styles.inputsContainer}>
         {code.map((digit, index) => (

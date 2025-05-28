@@ -9,10 +9,10 @@ import Button from "@/components/ui/buttons/Button";
 import { useRouter } from "expo-router";
 import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { hasAllValues } from "@/utils/functions/Functions";
-import { LoginRequest } from "@/api";
 import { useResetPassword } from "@/hooks/api/auth/useResetPassword";
 import * as SecureStorage from "expo-secure-store";
 import { SecureStorageKeys } from "@/constants/SecureStorage";
+import { LoginRequest } from '@/interfaces/auth/Auth.interface';
 
 export interface IForgotPasswordForm extends Omit<LoginRequest, "password"> {}
 const forgotPassword = () => {

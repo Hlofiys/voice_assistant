@@ -44,6 +44,7 @@ export default function HomeScreen() {
       const rawData = await SecureStorage.getItemAsync(
         SecureStorageKeys.CONFIRM_DATA
       );
+      console.log(rawData);
       const confirmData: { email: string; code: string } | null = rawData
         ? JSON.parse(rawData)
         : null;
@@ -106,16 +107,17 @@ export default function HomeScreen() {
 
       <ControlPanel gap={token ? 10 : undefined}>
         <Button type="primary" disabled={isPendingLogout} {...buttonProps} />
-        <Button type="primary" title='123' onPress={async ()=> console.log(await SecureStorage.getItemAsync(SecureStorageKeys.ACCESS_TOKEN), " ", token)} />
 
         {token ? (
           <Button
             onPress={handleLogout}
             type="text"
             isLoading={isPendingLogout}
-            loadingIndicatorColor="red"
+            loadingIndicatorColor="rgba(255, 0, 0, .7)"
           >
-            <Text style={{ color: "red" }}>Выйти из аккаунта</Text>
+            <Text style={{ color: "rgba(255, 0, 0, .7)" }}>
+              Выйти из аккаунта
+            </Text>
           </Button>
         ) : (
           <ThemedText>

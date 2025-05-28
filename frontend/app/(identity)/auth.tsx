@@ -12,13 +12,13 @@ import { View } from "react-native";
 import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { hasAllValues } from "@/utils/functions/Functions";
 import * as SecureStorage from "expo-secure-store";
-import { LoginRequest } from "@/api";
 import { useLogin } from "@/hooks/api/auth/useLogin";
 import { useDispatch } from "react-redux";
 import { setToken } from "@/reduxToolkit/Slices";
 import { useAlert } from "@/context/providers/portal.modal/AlertProvider";
 import { AxiosError } from "axios";
 import { SecureStorageKeys } from "@/constants/SecureStorage";
+import { LoginRequest } from '@/interfaces/auth/Auth.interface';
 
 const auth = () => {
   const [saveMeStatus, setSaveMeStatus] = useState<boolean>(false);
@@ -78,6 +78,7 @@ const auth = () => {
         reset();
         router.push("/"); //<- pushed to home page
       },
+      onError: (err:AxiosError)=>console.log(err.response?.data)
     });
   };
 
@@ -91,16 +92,15 @@ const auth = () => {
         buttons: [
           {
             text: "Нет",
-            style: "cancel", // iOS делает кнопку жирной и слева
+            style: "cancel",
           },
           {
             text: "Да",
             onPress: () => {
-              console.log(parsedSavedData);
               setValue("email", parsedSavedData.email);
               setValue("password", parsedSavedData.password);
             },
-            style: "destructive", // или опусти — по умолчанию
+            style: "destructive",
           },
         ],
       });

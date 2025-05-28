@@ -4,4 +4,5 @@ export enum SecureStorageKeys {
   ACCESS_TOKEN = "accessToken",
   REFRESH_TOKEN = "refreshToken",
   USER_AUTH = "userAuth",
+  SESSION_KEY = "session",
 }

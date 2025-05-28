@@ -21,11 +21,16 @@ type SFIconName =
   | "lock"
   | "change-circle"
   | "house.fill"
-  | "paperplane.fill"
+  // | "paperplane"
   | "chevron.left.forwardslash.chevron.right"
   | "chevron.right"
   | "chevron.left"
-  | "arrow.left.corner"; // добавили новую иконку
+  | "arrow.left.corner"
+  | "mic"
+  | "repeat"
+  | "pause.circle"
+  | "tray.and.arrow.up.fill"
+  | "play";
 
 const MAPPING: Record<SFIconName, MaterialIconName> = {
   eye: "visibility",
@@ -37,12 +42,16 @@ const MAPPING: Record<SFIconName, MaterialIconName> = {
   lock: "lock",
   "change-circle": "change-history",
   "house.fill": "home",
-  "paperplane.fill": "send",
+  "tray.and.arrow.up.fill": "send",
   "chevron.left.forwardslash.chevron.right": "code",
   "chevron.right": "chevron-right",
   "chevron.left": "chevron-left",
-  // стрелка влево уголком не имеет прямого аналога, оставим пустым
   "arrow.left.corner": "" as MaterialIconName,
+  mic: "mic",
+  repeat: "repeat",
+  "pause.circle": "pause",
+  play: "play-arrow",
+  // paperplane: 'style'
 };
 
 export function IconSymbol({

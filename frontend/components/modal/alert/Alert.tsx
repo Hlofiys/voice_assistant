@@ -1,3 +1,4 @@
+import { Portal } from "react-native-portalize";
 import { ThemedText } from "@/components/ThemedText";
 import { useCallback, FC, memo } from "react";
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from "react-native";
@@ -14,71 +15,79 @@ interface CustomAlertProps {
   subtitle?: string;
   buttons?: AlertButton[];
   onClose: () => void;
+  onDismiss?: () => void;
 }
 
-export const Alert: FC<CustomAlertProps> = memo(
-  ({ visible, title, subtitle, buttons = [{ text: "ДА" }], onClose }) => {
-    const handlePress = useCallback(
-      (btn: AlertButton) => {
-        onClose();
-        btn.onPress?.();
-      },
-      [onClose]
-    );
+export const Alert: FC<CustomAlertProps> = ({
+  visible,
+  title,
+  subtitle,
+  onDismiss,
+  buttons = [{ text: "ДА" }],
+  onClose,
+}) => {
+  const handlePress = useCallback(
+    (btn: AlertButton) => {
+      console.log(btn.onPress);
+      btn.onPress ? btn.onPress() : onDismiss?.();
+      onClose();
+    },
+    [onClose]
+  );
 
-    return (
-      <Modal
-        transparent
-        animationType="fade"
-        visible={visible}
-        onRequestClose={onClose}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.alertBox}>
-            <View style={styles.header}>
-              <ThemedText style={styles.title} key={title}>
-                {title}
+  return (
+    <Modal
+      transparent
+      animationType="fade"
+      visible={visible}
+      onRequestClose={onClose}
+      onDismiss={onDismiss}
+    >
+      <View style={styles.overlay}>
+        <View style={styles.alertBox}>
+          <View style={styles.header}>
+            <ThemedText style={styles.title}>
+              {title}
+            </ThemedText>
+            {subtitle ? (
+              <ThemedText style={styles.subtitle}>
+                {subtitle}
               </ThemedText>
-              {subtitle ? (
-                <ThemedText style={styles.subtitle} key={subtitle}>
-                  {subtitle}
-                </ThemedText>
-              ) : null}
-            </View>
+            ) : null}
+          </View>
 
-            <View style={styles.buttonContainer}>
-              {buttons.map((btn, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  onPress={() => handlePress(btn)}
+          <View style={styles.buttonContainer}>
+            {buttons.map((btn, idx) => (
+              <TouchableOpacity
+                key={idx}
+                onPress={() => handlePress(btn)}
+                style={[
+                  styles.button,
+                  btn.style === "cancel" && styles.cancelButton,
+                  btn.style &&
+                    ["destructive", "default"].includes(btn.style) &&
+                    styles.destructiveButton,
+                ]}
+              >
+                <Text
                   style={[
-                    styles.button,
-                    btn.style === "cancel" && styles.cancelButton,
+                    styles.buttonText,
+                    btn.style === "cancel" && styles.cancelButtonText,
                     btn.style &&
                       ["destructive", "default"].includes(btn.style) &&
-                      styles.destructiveButton,
+                      styles.destructiveButtonText,
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.buttonText,
-                      btn.style === "cancel" && styles.cancelButtonText,
-                      btn.style &&
-                        ["destructive", "default"].includes(btn.style) &&
-                        styles.destructiveButtonText,
-                    ]}
-                  >
-                    {btn.text}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                  {btn.text}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
-      </Modal>
-    );
-  }
-);
+      </View>
+    </Modal>
+  );
+};
 
 const styles = StyleSheet.create({
   overlay: {
@@ -87,6 +96,7 @@ const styles = StyleSheet.create({
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
+    // position: "absolute",
   },
   alertBox: {
     width: "75%",

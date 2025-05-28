@@ -1,17 +1,13 @@
 import { useMutation } from "@tanstack/react-query";
-import { useAuthApi } from "./useAuthApi.instance";
 import { useErrorHook } from "@/hooks/gen/error/useErrorHook";
-import { AxiosResponse } from "axios";
-import { Logout200Response } from "@/api";
-import AuthService from '@/services/auth/Auth.service';
+import AuthService from "@/services/auth/Auth.service";
 
 export const useLogout = () => {
-  const { onError, isPending } = useErrorHook();
-  // const instance = useAuthApi();
+  const { onError } = useErrorHook();
 
-  return useMutation<AxiosResponse<Logout200Response>, unknown, void>({
+  return useMutation({
     mutationKey: ["useLogout"],
-    mutationFn: () => AuthService.logout(),
-    onError: (err) => onError(err as any),
+    mutationFn: AuthService.logout,
+    onError,
   });
 };

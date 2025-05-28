@@ -1,11 +1,5 @@
 import { Alert } from "@/components/modal/alert/Alert";
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-  useEffect,
-} from "react";
+import React, { createContext, useContext, useState, useCallback } from "react";
 
 type AlertParams = {
   title: string;
@@ -27,46 +21,52 @@ const AlertContext = createContext<AlertContextType | undefined>(undefined);
 export const AlertProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [visible, setVisible] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
   const [params, setParams] = useState<AlertParams | null>(null);
+  const [pendingParams, setPendingParams] = useState<AlertParams | null>(null);
 
   const showAlert = useCallback(
     (newParams: AlertParams) => {
-      if (visible) {
-        // сначала скрываем текущий alert
-        setVisible(false);
-
-        // подождать завершения анимации (300ms) перед показом нового
-        setTimeout(() => {
-          setParams(newParams);
-          setVisible(true);
-        }, 300);
+      if (isVisible) {
+        // Если уже видим, сначала закроем
+        setPendingParams(newParams); // запоминаем, что надо показать после закрытия
+        setIsVisible(false);
       } else {
         setParams(newParams);
-        setVisible(true);
+        setIsVisible(true);
       }
     },
-    [visible]
+    [isVisible]
   );
 
   const onClose = useCallback(() => {
-    setVisible(false); // скрыть с анимацией
-    setParams(null); // размонтировать после анимации
+    setTimeout(() => {
+      setIsVisible(false);
+    }, 300);
   }, []);
 
+  const onModalDismiss = useCallback(() => {
+    // После того, как модал полностью скрыт
+    if (pendingParams) {
+      setParams(pendingParams);
+      setPendingParams(null);
+      setIsVisible(true);
+    } else {
+      setParams(null);
+    }
+  }, [pendingParams]);
+
   return (
-    <AlertContext.Provider
-      value={{ showAlert, isAlertVisible: visible }}
-    >
+    <AlertContext.Provider value={{ showAlert, isAlertVisible: isVisible }}>
       {children}
-      {visible && params && (
+      {params && (
         <Alert
-          key={params.title + (params.subtitle || "")}
-          visible={visible}
+          visible={isVisible}
           title={params.title}
           subtitle={params.subtitle}
           buttons={params.buttons}
           onClose={onClose}
+          onDismiss={onModalDismiss} // <- добавляем сюда
         />
       )}
     </AlertContext.Provider>

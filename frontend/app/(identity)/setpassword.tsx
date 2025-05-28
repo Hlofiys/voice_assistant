@@ -3,10 +3,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import IdentityLayout from "@/components/layouts/identity/IdentityLayout";
 import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { useSetNewPassword } from "@/hooks/api/auth/useSetNewPassword";
-import {
-  LoginRequest,
-  PasswordResetWithCodeRequest,
-} from "@/api";
 import { usePasswordRules } from "@/hooks/gen/password/usePasswordRules";
 import FormLayout from "@/components/layouts/form/FormLayout";
 import ThemedInput from "@/components/input/themedInput/ThemedInput";
@@ -21,6 +17,7 @@ import { useAlert } from "@/context/providers/portal.modal/AlertProvider";
 import { useDispatch } from "react-redux";
 import { setToken } from "@/reduxToolkit/Slices";
 import { SecureStorageKeys } from "@/constants/SecureStorage";
+import { LoginRequest, PasswordResetWithCodeRequest } from '@/interfaces/auth/Auth.interface';
 
 interface ISetNewPasswordForm
   extends Omit<PasswordResetWithCodeRequest, "code"> {

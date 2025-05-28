@@ -16,9 +16,9 @@ import { IslandPopup } from "@/components/modal/popup/IslandPopup";
 import { useRegister } from "@/hooks/api/auth/useRegister";
 import { hasAllValues } from "@/utils/functions/Functions";
 
-import type { RegisterRequest } from "@/api";
 import { usePasswordRules } from "@/hooks/gen/password/usePasswordRules";
 import { SecureStorageKeys } from "@/constants/SecureStorage";
+import { RegisterRequest } from '@/interfaces/auth/Auth.interface';
 
 interface IRegisterForm extends RegisterRequest {
   confirmPassword: string;

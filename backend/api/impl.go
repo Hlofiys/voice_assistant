@@ -1094,34 +1094,7 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		log.Println("[Chat] LLM did not request a function call. Trying to extract transcription and send to LLM for answer.")
-		// Try to extract transcription from the first response
-		var extractedTranscription string
-		if llmFirstResponseCandidate.Content != nil {
-			for _, part := range llmFirstResponseCandidate.Content.Parts {
-				if part.Text != "" {
-					extractedTranscription = part.Text
-					break
-				}
-			}
-		}
-		if extractedTranscription != "" {
-			log.Printf("[Chat] Sending extracted transcription to LLM for answer: %s", extractedTranscription)
-			transcriptionPart := genai.Part{Text: extractedTranscription}
-			respTrans, err := chatSession.SendMessage(ctx, transcriptionPart)
-			if err != nil {
-				log.Printf("[Chat] Error sending transcription to LLM: %v", err)
-				assistantResponseText = extractedTranscription // fallback
-			} else if respTrans != nil && len(respTrans.Candidates) > 0 && respTrans.Candidates[0].Content != nil && len(respTrans.Candidates[0].Content.Parts) > 0 {
-				assistantResponseText = respTrans.Text()
-				userQuery = extractedTranscription
-			} else {
-				log.Println("[Chat] LLM response to transcription is empty or invalid.")
-				assistantResponseText = extractedTranscription // fallback
-			}
-		} else {
-			log.Println("[Chat] No transcription found in LLM response, using direct textual response.")
-			assistantResponseText = resp1.Text()
-		}
+		assistantResponseText = resp1.Text()
 	}
 
 	// Final response handling

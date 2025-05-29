@@ -154,6 +154,28 @@ components:
           type: string
           description: Refresh token
 
+    NearestRequest:
+      type: object
+      required:
+        - latitude
+        - longitude
+      properties:
+        latitude:
+          type: number
+          format: float
+        longitude:
+          type: number
+          format: float
+
+    NearestResponse:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          description: Nearest location or information as text
+
 paths:
   /api/auth/register:
     post:
@@ -486,6 +508,38 @@ paths:
                 $ref: "#/components/schemas/Error"
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/nearest:
+    post:
+      summary: Get nearest location or information
+      operationId: nearest
+      tags:
+        - Location
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NearestRequest"
+      responses:
+        "200":
+          description: Nearest location or information as text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NearestResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
           content:
             application/json:
               schema:

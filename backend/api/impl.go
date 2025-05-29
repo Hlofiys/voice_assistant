@@ -200,7 +200,7 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 
 	if userDetails.Code.Valid && userDetails.Code.String != "" {
 		log.Printf("[Login] User email not verified for: %s. Code: '%s'", loginRequest.Email, userDetails.Code.String)
-		http.Error(w, `{"message": "Please verify your email address before logging in."}`, http.StatusBadRequest)
+		http.Error(w, `{"message": "Please set a password"}`, http.StatusBadRequest)
 		return
 	}
 

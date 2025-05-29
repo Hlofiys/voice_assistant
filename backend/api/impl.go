@@ -61,7 +61,42 @@ type Server struct {
 
 // Nearest implements ServerInterface.
 func (s *Server) Nearest(w http.ResponseWriter, r *http.Request) {
-	panic("unimplemented")
+	bodyBytes, err := io.ReadAll(r.Body)
+	defer func() { _ = r.Body.Close() }()
+	if err != nil {
+		http.Error(w, `{"message": "could not read request body"}`, http.StatusBadRequest)
+		log.Printf("[ConfirmEmail] Error reading request body: %v", err)
+		return
+	}
+
+	var nearestRequest *NearestRequest
+	err = json.Unmarshal(bodyBytes, &nearestRequest)
+
+	if err != nil {
+		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
+		log.Printf("[ConfirmEmail] Error unmarshalling request body: %v", err)
+		return
+	}
+
+	getNearestPharmacyParams := &db.GetNearestPharmacyParams{
+		StMakepoint:   nearestRequest.Longitude,
+		StMakepoint_2: nearestRequest.Latitude,
+	}
+
+	nearestPharm, err := s.db.GetNearestPharmacy(r.Context(), *getNearestPharmacyParams)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "no pharmacies found", http.StatusNotFound)
+			return
+		}
+		log.Printf("[Nearest] Database error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(nearestPharm.Text)
 }
 
 func NewServer(jwtAuth tools.Authenticator, client *genai.Client, clientEmbs *genaiembs.Client, chromaDBClient chromago.Client, chromaCollection string, db *db.Queries) *Server {

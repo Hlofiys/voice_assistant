@@ -13,6 +13,8 @@ import { AudioPlayerControls } from "./AudioPlayerControl";
 import { useChat } from "@/context/providers/chat/ChatProvider";
 import { IconSymbol } from "../ui/IconSymbol";
 import { useSpeech } from "@/hooks/audio/useSpeech";
+import PromptSuggestions from "../PromptSuggestions";
+import { FadeInView } from "../FadeInView";
 
 export default function MessageDisplay() {
   const [isRecording, setIsRecording] = useState(false);
@@ -90,29 +92,45 @@ export default function MessageDisplay() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        {isRecording && <Text style={styles.statusText}>Запись идет...</Text>}
+        {(showStartRecordingPlaceholder || isRecording) && (
+          <PromptSuggestions />
+        )}
+
+        {isRecording && (
+          <FadeInView>
+            <Text style={styles.statusText}>Запись идет...</Text>
+          </FadeInView>
+        )}
 
         {!isRecording && isLoading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#0a7ea4" />
-            <Text style={styles.statusText}>Загружаем ответ ассистента...</Text>
-          </View>
+          <FadeInView>
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#0a7ea4" />
+              <Text style={styles.statusText}>
+                Загружаем ответ ассистента...
+              </Text>
+            </View>
+          </FadeInView>
         )}
 
         {showReadyToSendPlaceholder && (
-          <View style={styles.placeholderContainer}>
-            <Text style={styles.placeholderText}>
-              Нажмите на главную кнопку, чтобы отправить запись
-            </Text>
-          </View>
+          <FadeInView>
+            <View style={styles.placeholderContainer}>
+              <Text style={styles.placeholderText}>
+                Нажмите на главную кнопку, чтобы отправить запись
+              </Text>
+            </View>
+          </FadeInView>
         )}
 
         {showStartRecordingPlaceholder && (
-          <View style={styles.placeholderContainer}>
-            <Text style={styles.placeholderText}>
-              Нажмите кнопку микрофона, чтобы начать запись
-            </Text>
-          </View>
+          <FadeInView>
+            <View style={styles.placeholderContainer}>
+              <Text style={styles.placeholderText}>
+                Нажмите кнопку микрофона, чтобы начать запись
+              </Text>
+            </View>
+          </FadeInView>
         )}
 
         {!isRecording && messages.assistant_response && (
@@ -232,7 +250,7 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     textAlign: "center",
-    fontSize: 22,
+    fontSize: 20,
     color: "#0a7ea4",
     fontStyle: "italic",
   },

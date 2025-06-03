@@ -3,7 +3,10 @@ import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import * as SecureStorage from "expo-secure-store";
 import { IInitialState } from "./Interfaces";
 import { SecureStorageKeys } from "@/constants/SecureStorage";
-import { ISessionData, SESSION_TTL_MS } from "@/hooks/gen/session/types/TSession";
+import {
+  ISessionData,
+  SESSION_TTL_MS,
+} from "@/hooks/gen/session/types/TSession";
 
 export const initialState: IInitialState = {
   token: null,
@@ -17,29 +20,29 @@ export const loadToken = createAsyncThunk("auth/loadToken", async () => {
   return token;
 });
 
-export const loadSession = createAsyncThunk("chat/session", async () => {
-  try {
-    const stored = await SecureStorage.getItemAsync(
-      SecureStorageKeys.SESSION_KEY
-    );
+// export const loadSession = createAsyncThunk("chat/session", async () => {
+//   try {
+//     const stored = await SecureStorage.getItemAsync(
+//       SecureStorageKeys.SESSION_KEY
+//     );
 
-    if (!stored) return null;
+//     if (!stored) return null;
 
-    const session: ISessionData = JSON.parse(stored);
+//     const session: ISessionData = JSON.parse(stored);
 
-    const isExpired = Date.now() - session.createdAt > SESSION_TTL_MS;
+//     const isExpired = Date.now() - session.createdAt > SESSION_TTL_MS;
 
-    if (isExpired) {
-      await SecureStorage.deleteItemAsync(SecureStorageKeys.SESSION_KEY);
-      return null;
-    }
+//     if (isExpired) {
+//       await SecureStorage.deleteItemAsync(SecureStorageKeys.SESSION_KEY);
+//       return null;
+//     }
 
-    return session;
-  } catch (error) {
-    console.warn("Ошибка загрузки сессии:", error);
-    return null;
-  }
-});
+//     return session;
+//   } catch (error) {
+//     console.warn("Ошибка загрузки сессии:", error);
+//     return null;
+//   }
+// });
 
 const authTokenSlice = createSlice({
   name: "token",
@@ -66,11 +69,6 @@ const sessionSlice = createSlice({
     setSession: (state, action: PayloadAction<ISessionData | null>) => {
       return (state = action.payload);
     },
-  },
-  extraReducers: (builder) => {
-    builder.addCase(loadSession.fulfilled, (state, action) => {
-      return (state = action.payload ?? null);
-    });
   },
 });
 

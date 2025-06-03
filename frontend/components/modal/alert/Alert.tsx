@@ -1,4 +1,3 @@
-import { Portal } from "react-native-portalize";
 import { ThemedText } from "@/components/ThemedText";
 import { useCallback, FC, memo } from "react";
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from "react-native";
@@ -28,7 +27,6 @@ export const Alert: FC<CustomAlertProps> = ({
 }) => {
   const handlePress = useCallback(
     (btn: AlertButton) => {
-      console.log(btn.onPress);
       btn.onPress ? btn.onPress() : onDismiss?.();
       onClose();
     },
@@ -46,13 +44,9 @@ export const Alert: FC<CustomAlertProps> = ({
       <View style={styles.overlay}>
         <View style={styles.alertBox}>
           <View style={styles.header}>
-            <ThemedText style={styles.title}>
-              {title}
-            </ThemedText>
+            <ThemedText style={styles.title}>{title}</ThemedText>
             {subtitle ? (
-              <ThemedText style={styles.subtitle}>
-                {subtitle}
-              </ThemedText>
+              <ThemedText style={styles.subtitle}>{subtitle}</ThemedText>
             ) : null}
           </View>
 
@@ -96,17 +90,14 @@ const styles = StyleSheet.create({
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    // position: "absolute",
   },
   alertBox: {
     width: "75%",
-    // maxWidth: "90%",
     backgroundColor: "#1e1e1e",
     borderRadius: 16,
     overflow: "hidden",
     display: "flex",
     alignItems: "stretch",
-    // gap: 20,
   },
   header: {
     display: "flex",
@@ -139,7 +130,6 @@ const styles = StyleSheet.create({
     borderColor: "gray",
     paddingVertical: 12.5,
     alignItems: "center",
-    // backgroundColor: "#B0BEC5",
   },
   cancelButton: {
     borderRightWidth: 0.2,

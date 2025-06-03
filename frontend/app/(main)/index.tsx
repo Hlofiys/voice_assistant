@@ -1,11 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  ButtonProps,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { useCallback, useEffect, useMemo } from "react";
+import { ButtonProps, StyleSheet, Text, View } from "react-native";
 import LottieView from "lottie-react-native";
 import Greeting from "@/assets/json/anim/greeting/Greeting.json";
 
@@ -44,7 +38,6 @@ export default function HomeScreen() {
       const rawData = await SecureStorage.getItemAsync(
         SecureStorageKeys.CONFIRM_DATA
       );
-      console.log(rawData);
       const confirmData: { email: string; code: string } | null = rawData
         ? JSON.parse(rawData)
         : null;

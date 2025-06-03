@@ -1,18 +1,26 @@
-import { View, Text, StyleSheet } from "react-native";
-import React, { useState } from "react";
-import { AudioPlayerControls } from "@/components/audio/AudioPlayerControl";
-import { TimeDisplay } from "@/components/audio/TimeDisplay";
-import Button from "@/components/ui/buttons/Button";
+import { View, StyleSheet, TouchableOpacity, Platform } from "react-native";
 import MessageDisplay from "@/components/audio/MessageDisplay";
+import { BlurView } from "expo-blur";
+import { IconSymbol } from "@/components/ui/IconSymbol";
+import { useRouter } from "expo-router";
 
 const record = () => {
-  const [userRequest, setUserRequest] = useState<string>("");
+  const router = useRouter();
+
   return (
     <View style={styles.recordingContainer}>
-      <MessageDisplay
-        // userRequest={userRequest}
-        // responseText="Lorem ipsum dolor sit amet consectetur adipisicing elit. At illum exercitationem enim odio distinctio doloremque? Eum natus in quae molestiae vel sint at nihil, placeat nobis quidem exercitationem veniam accusamus quos id incidunt? Labore porro ullam magnam vitae quidem debitis illo, rerum quia cumque placeat quas aliquam pariatur expedita! Lorem ipsum dolor sit amet consectetur adipisicing elit. At illum exercitationem enim odio distinctio doloremque? Eum natus in quae molestiae vel sint at nihil, placeat nobis quidem exercitationem veniam accusamus quos id incidunt? Labore porro ullam magnam vitae quidem debitis illo, rerum quia cumque placeat quas aliquam pariatur expedita!Lorem ipsum dolor sit amet consectetur adipisicing elit. At illum exercitationem enim odio distinctio doloremque? Eum natus in quae molestiae vel sint at nihil, placeat nobis quidem exercitationem veniam accusamus quos id incidunt? Labore porro ullam magnam vitae quidem debitis illo, rerum quia cumque placeat quas aliquam pariatur expedita!"
-      />
+      <BlurView intensity={35} tint="light" style={styles.backButton}>
+        <TouchableOpacity onPress={router.back}>
+          <IconSymbol
+            name="chevron.left"
+            size={Platform.OS === "android" ? 30 : 20}
+            weight="medium"
+            color={"0a7ea4"}
+            style={styles.icon}
+          />
+        </TouchableOpacity>
+      </BlurView>
+      <MessageDisplay />
     </View>
   );
 };
@@ -25,6 +33,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 50,
     padding: 10,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    overflow: "hidden",
+    borderRadius: "50%",
+    // backgroundColor: "transparent",
+    position: "absolute",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    top: 30,
+    left: 10,
+    zIndex: 99,
+  },
+  icon: {
+    display: "flex",
+    alignItems: "center",
+    color: "#0a7ea4",
+    fontWeight: 700,
+    zIndex: 99,
+    margin: 0,
+    padding: 0,
   },
   text: {
     color: "red",

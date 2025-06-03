@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { View, TouchableOpacity, Text, StyleSheet } from "react-native";
 import { MotiView, AnimatePresence } from "moti";
 

@@ -1,5 +1,4 @@
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { Text, StyleSheet } from "react-native";
 import { AnimatePresence, MotiView } from "moti";
 
 interface TimeDisplayProps {

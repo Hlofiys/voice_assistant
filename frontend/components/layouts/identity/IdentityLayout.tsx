@@ -2,9 +2,8 @@ import {
   View,
   StyleSheet,
   TouchableOpacity,
-  KeyboardAvoidingView,
 } from "react-native";
-import React, { FC } from "react";
+import { FC } from "react";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { ThemedText } from "@/components/ThemedText";
 import { useRouter } from "expo-router";
@@ -73,12 +72,6 @@ const styles = StyleSheet.create({
     padding: 10,
     gap: 32,
   },
-
-  // blurContainer: {
-  //   overflow: "hidden",
-  //   borderRadius: 20,
-  //   marginVertical: 10,
-  // },
   backButton: {
     width: 40,
     height: 40,

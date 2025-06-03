@@ -2,7 +2,7 @@
 import { configureStore } from "@reduxjs/toolkit";
 import { authSliceReduce, sessionSliceReduce } from "./Slices";
 import { authMiddleware } from "./middleware/AuthMiddleware";
-import { sessionMiddleware } from "./middleware/SessionMiddleware";
+// import { sessionMiddleware } from "./middleware/SessionMiddleware";
 
 const store = configureStore({
   reducer: {
@@ -10,11 +10,11 @@ const store = configureStore({
     session: sessionSliceReduce,
   },
   middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware().concat(authMiddleware, sessionMiddleware),
+    getDefaultMiddleware().concat(authMiddleware),
 });
 
 store.dispatch({ type: "auth/loadToken" });
-store.dispatch({ type: "chat/session" });
+// store.dispatch({ type: "chat/session" });
 
 export default store;
 

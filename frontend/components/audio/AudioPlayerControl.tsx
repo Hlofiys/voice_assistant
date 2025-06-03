@@ -1,12 +1,17 @@
-import React, { FC, useCallback, useEffect, useRef, useState } from "react";
+import { FC, useCallback, useEffect, useRef, useState } from "react";
 import { View, StyleSheet, TouchableOpacity, Platform } from "react-native";
 import { MicrophoneButton } from "../ui/buttons/microphone/MicrophoneButton";
 import { AnimatePresence, MotiView } from "moti";
+import * as FileSystem from "expo-file-system";
+import * as SecureStorage from "expo-secure-store";
 import { IconSymbol } from "../ui/IconSymbol";
 import { useRecordingHandler } from "@/hooks/audio/useRecordingHandler";
 import { TimeDisplay } from "./TimeDisplay";
 import { useSendHandler } from "@/hooks/audio/useSendHandler";
 import { useChat } from "@/context/providers/chat/ChatProvider";
+import { useLocationPermission } from "@/hooks/geolocation/useLocationPermission";
+import Button from '../ui/buttons/Button';
+import { SecureStorageKeys } from '@/constants/SecureStorage';
 
 interface IAudioPlayerControlsProps {
   onReadyToSendHandler?: (ready: boolean) => void;
@@ -16,7 +21,9 @@ interface IAudioPlayerControlsProps {
 export const AudioPlayerControls: FC<IAudioPlayerControlsProps> = (props) => {
   const { onRecordingStatusChange, onLoadingChange, onReadyToSendHandler } =
     props;
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState<boolean>(false);
+
+  const { getLocation } = useLocationPermission();
 
   const { setAssistantResponse, setTranscription } = useChat();
   const {
@@ -34,7 +41,6 @@ export const AudioPlayerControls: FC<IAudioPlayerControlsProps> = (props) => {
 
   useEffect(() => {
     if (prevIsRecording.current !== isRecording && onRecordingStatusChange) {
-      console.log("change recording");
       prevIsRecording.current = isRecording;
       onRecordingStatusChange(isRecording);
     }
@@ -55,15 +61,24 @@ export const AudioPlayerControls: FC<IAudioPlayerControlsProps> = (props) => {
 
   const handleStartRecording = useCallback(async () => {
     if (!!file && !isRecording) {
-      // 🔼 Отправка данных на сервер
-      console.log("📤 Отправка записи...");
-      await handleSend(({ data }) => {
-        setAssistantResponse(data.assistant_response ?? "");
-        setTranscription(data.transcription ?? "");
-        console.log(data.assistant_response);
-        handleReset();
-        deleteFile();
-      });
+      const info = await FileSystem.getInfoAsync(file);
+      if (!info.exists) {
+        console.warn("Файл не найден перед отправкой:", file);
+        return;
+      }
+
+      try {
+        const userLocation = await getLocation();
+        console.log(`Координаты: ${userLocation?.latitude} ${userLocation?.latitude}`);
+        await handleSend(userLocation ?? undefined, ({ data }) => {
+          setAssistantResponse(data.assistant_response ?? "");
+          setTranscription(data.transcription ?? "");
+          handleReset();
+          deleteFile();
+        });
+      } catch (error) {
+        console.log("Ошибка при отправке файла:", error);
+      }
       return;
     }
 
@@ -79,7 +94,7 @@ export const AudioPlayerControls: FC<IAudioPlayerControlsProps> = (props) => {
       onReadyToSendHandler && onReadyToSendHandler(true);
       stopRecording();
     }
-  }, [isRecording, file, handleReset, deleteFile]);
+  }, [isRecording, file, handleReset, deleteFile, getLocation]);
 
   const handlePause = useCallback(() => {
     onReadyToSendHandler && onReadyToSendHandler(true);
@@ -89,6 +104,7 @@ export const AudioPlayerControls: FC<IAudioPlayerControlsProps> = (props) => {
   return (
     <>
       <TimeDisplay time={time} visible={expanded} />
+      <Button onPress={()=>SecureStorage.setItemAsync(SecureStorageKeys.ACCESS_TOKEN, '123')}>234</Button>
       <View style={styles.container}>
         <AnimatePresence>
           {expanded && (

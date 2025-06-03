@@ -3,9 +3,8 @@ import {
   StyleSheet,
   TouchableWithoutFeedback,
   Keyboard,
-  Alert,
 } from "react-native";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import IdentityLayout from "@/components/layouts/identity/IdentityLayout";
 import CodeInput from "@/components/input/codeInput/CodeInput";
 import ControlPanel from "@/components/ControlPanel";
@@ -17,7 +16,6 @@ import { useConfirmEmail } from "@/hooks/api/auth/useConfirmEmail";
 import { useDispatch } from "react-redux";
 import { setToken } from "@/reduxToolkit/Slices";
 import { useAlert } from "@/context/providers/portal.modal/AlertProvider";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useDisableGestureEnabled } from "@/hooks/gen/navigation/useDisableGestureEnabled";
 import { SecureStorageKeys } from "@/constants/SecureStorage";
 

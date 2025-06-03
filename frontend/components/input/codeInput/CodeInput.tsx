@@ -1,12 +1,11 @@
 import { ThemedText } from "@/components/ThemedText";
-import React, {
+import {
   Dispatch,
   FC,
   SetStateAction,
   useCallback,
   useEffect,
   useRef,
-  useState,
 } from "react";
 import {
   View,
@@ -26,7 +25,6 @@ interface ICodeInputProps {
 }
 const CodeInput: FC<ICodeInputProps> = (props) => {
   const { code, onChange, gap = 16 } = props;
-  // const [localCode, setLocalCode] = useState(code);
   const inputsRef = useRef<(TextInput | null)[]>([]);
 
   // вызываем onChange при изменении localCode, но не внутри setState!

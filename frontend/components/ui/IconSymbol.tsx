@@ -42,7 +42,7 @@ const MAPPING: Record<SFIconName, MaterialIconName> = {
   lock: "lock",
   "change-circle": "change-history",
   "house.fill": "home",
-  "tray.and.arrow.up.fill": "send",
+  "tray.and.arrow.up.fill": "outbox",
   "chevron.left.forwardslash.chevron.right": "code",
   "chevron.right": "chevron-right",
   "chevron.left": "chevron-left",
@@ -67,24 +67,6 @@ export function IconSymbol({
   style?: StyleProp<TextStyle>;
   weight?: SymbolWeight;
 }) {
-  if (name === "arrow.left.corner") {
-    // Рендерим текстовый символ уголка для стрелки влево без основания
-    return (
-      <Text
-        style={[
-          {
-            fontSize: size,
-            color: color,
-            fontWeight: "bold",
-            lineHeight: size, // выравнивание по вертикали
-          },
-          style,
-        ]}
-      >
-        ‹
-      </Text>
-    );
-  }
 
   const materialName = MAPPING[name];
 

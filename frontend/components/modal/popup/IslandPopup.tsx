@@ -1,6 +1,6 @@
 import Checkbox from "@/components/input/checkbox/Checkbox";
 import { ThemedText } from "@/components/ThemedText";
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { View, Platform, Dimensions, StyleSheet } from "react-native";
 import Animated, {
   useSharedValue,

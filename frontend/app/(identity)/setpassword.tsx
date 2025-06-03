@@ -17,7 +17,11 @@ import { useAlert } from "@/context/providers/portal.modal/AlertProvider";
 import { useDispatch } from "react-redux";
 import { setToken } from "@/reduxToolkit/Slices";
 import { SecureStorageKeys } from "@/constants/SecureStorage";
-import { LoginRequest, PasswordResetWithCodeRequest } from '@/interfaces/auth/Auth.interface';
+import {
+  LoginRequest,
+  PasswordResetWithCodeRequest,
+} from "@/interfaces/auth/Auth.interface";
+import { useDisableGestureEnabled } from "@/hooks/gen/navigation/useDisableGestureEnabled";
 
 interface ISetNewPasswordForm
   extends Omit<PasswordResetWithCodeRequest, "code"> {
@@ -27,6 +31,8 @@ interface ISetNewPasswordForm
 const setpassword = () => {
   const [code, setCode] = useState<string[]>(Array(6).fill(""));
   const [isVisible, setIsVisible] = useState<boolean>(false);
+
+  useDisableGestureEnabled();
 
   const { mutateAsync: set_password, isPending: isPendingSetPassword } =
     useSetNewPassword();
@@ -156,7 +162,7 @@ const setpassword = () => {
   };
 
   return (
-    <IdentityLayout header="Установите новый пароль">
+    <IdentityLayout header="Установите новый пароль" hiddenBackBtn>
       <View style={{ width: "100%", display: "flex", gap: 90 }}>
         <FormLayout>
           <CodeInput

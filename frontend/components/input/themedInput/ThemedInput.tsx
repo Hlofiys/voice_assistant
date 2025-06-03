@@ -1,12 +1,11 @@
 import {
   View,
-  Text,
   StyleSheet,
   TextInput,
   TextInputProps,
   TouchableOpacity,
 } from "react-native";
-import React, { FC, useEffect, useMemo, useState } from "react";
+import { FC, useMemo, useState } from "react";
 import { ThemedText } from "../../ThemedText";
 import { IconSymbol } from "../../ui/IconSymbol";
 import { useRouter } from "expo-router";
@@ -153,64 +152,3 @@ const styles = StyleSheet.create({
     color: "#EA2A2A",
   },
 });
-
-// import { View, TextInput, StyleSheet, TextInputProps } from "react-native";
-// import React from "react";
-// import { useThemeColor } from "@/hooks/useThemeColor";
-// import { ThemedText } from '../ThemedText';
-
-// type ThemedInputProps = TextInputProps & {
-//   label?: string;
-//   lightBackground?: string;
-//   darkBackground?: string;
-// };
-
-// const ThemedInput: React.FC<ThemedInputProps> = ({
-//   label,
-//   lightBackground,
-//   darkBackground,
-//   style,
-//   ...props
-// }) => {
-//   const backgroundColor = useThemeColor(
-//     { light: lightBackground, dark: darkBackground },
-//     "background" // ← ключ из темы
-//   );
-//   const textColor = useThemeColor({}, "text");
-//   const borderColor = useThemeColor({}, "background");
-
-//   return (
-//     <View style={styles.container}>
-//       {label && <ThemedText>{label}</ThemedText>}
-//       <TextInput
-//         style={[
-//           styles.input,
-//           {
-//             backgroundColor,
-//             color: textColor,
-//             borderColor,
-//           },
-//           style,
-//         ]}
-//         placeholderTextColor={textColor + "99"} // слегка прозрачный
-//         {...props}
-//       />
-//     </View>
-//   );
-// };
-
-// export default ThemedInput;
-
-// const styles = StyleSheet.create({
-//   container: {
-//     width: "100%",
-//     gap: 4,
-//   },
-//   input: {
-//     width: "100%",
-//     height: 44,
-//     paddingHorizontal: 12,
-//     borderRadius: 10,
-//     borderWidth: 1,
-//   },
-// });

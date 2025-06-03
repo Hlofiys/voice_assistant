@@ -27,8 +27,8 @@ export const useRefreshToken = (refetchKey?: string[]) => {
         data.data.token
       );
       await SecureStorage.setItemAsync(
-        SecureStorageKeys.ACCESS_TOKEN,
-        data.data.token
+        SecureStorageKeys.REFRESH_TOKEN,
+        data.data.refresh_token
       );
       dispatch(setToken(data.data.token));
       if (refetchKey)

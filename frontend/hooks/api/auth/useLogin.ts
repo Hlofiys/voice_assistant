@@ -25,7 +25,7 @@ export const useLogin = () => {
             {
               text: "Пройти",
               onPress: () => {
-                router.push("/(identity)/confirm");
+                router.push("/(identity)/setpassword");
               },
             },
           ],

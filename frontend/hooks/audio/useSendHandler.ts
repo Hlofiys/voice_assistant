@@ -5,6 +5,7 @@ import { IChatProps } from "@/services/chat/Chat.service";
 import { AxiosResponse } from "axios";
 import { Chat200Response } from "@/interfaces/chat/Chat.interface";
 import { useSession } from "../gen/session/useSession";
+import { Coordinates } from "../geolocation/useLocationPermission";
 
 export const useSendHandler = (file: string) => {
   const { showAlert } = useAlert();
@@ -12,6 +13,7 @@ export const useSendHandler = (file: string) => {
   const { sessionId } = useSession();
 
   const handleSend = async (
+    location?: Coordinates,
     onSuccess?: (
       data: AxiosResponse<Chat200Response, any>,
       variables: IChatProps,
@@ -34,6 +36,7 @@ export const useSendHandler = (file: string) => {
       fileName: "recording.m4a",
       mimeType: "audio/mp4",
       session_id: sessionId ?? undefined,
+      location,
     };
     console.log("file: ", props);
     await send_message(props, { onSuccess });

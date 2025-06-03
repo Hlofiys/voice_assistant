@@ -1,5 +1,5 @@
 import { Alert } from "@/components/modal/alert/Alert";
-import React, { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback } from "react";
 
 type AlertParams = {
   title: string;

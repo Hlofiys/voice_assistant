@@ -71,7 +71,7 @@ export const useRecordingHandler = () => {
     pauseTimer(); // Останавливаем таймер (ставим на паузу) после остановки записи
     // Если нужно сбрасывать таймер после остановки записи, можно вызвать resetTimer()
 
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 1000));
     const recordedUri = audioRecorder.uri;
     if (recordedUri) {
       const fileInfo = await FileSystem.getInfoAsync(recordedUri);
@@ -83,7 +83,7 @@ export const useRecordingHandler = () => {
       }
     }
 
-    setIsRecording(false);
+    setIsRecording(false);  
   }, [audioRecorder, pauseTimer]);
 
   const deleteFile = async () => {

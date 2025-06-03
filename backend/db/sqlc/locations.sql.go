@@ -9,11 +9,11 @@ import (
 	"context"
 )
 
-const getNearestPharmacy = `-- name: GetNearestPharmacy :one
+const getNearestPharmacy = `-- name: GetNearestPharmacy :many
 SELECT id, text, ST_AsText(location) AS location_wkt
 		FROM locations
 		ORDER BY location <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
-		LIMIT 1
+		LIMIT 3
 `
 
 type GetNearestPharmacyParams struct {
@@ -27,9 +27,22 @@ type GetNearestPharmacyRow struct {
 	LocationWkt interface{} `json:"location_wkt"`
 }
 
-func (q *Queries) GetNearestPharmacy(ctx context.Context, arg GetNearestPharmacyParams) (GetNearestPharmacyRow, error) {
-	row := q.db.QueryRow(ctx, getNearestPharmacy, arg.StMakepoint, arg.StMakepoint_2)
-	var i GetNearestPharmacyRow
-	err := row.Scan(&i.ID, &i.Text, &i.LocationWkt)
-	return i, err
+func (q *Queries) GetNearestPharmacy(ctx context.Context, arg GetNearestPharmacyParams) ([]GetNearestPharmacyRow, error) {
+	rows, err := q.db.Query(ctx, getNearestPharmacy, arg.StMakepoint, arg.StMakepoint_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetNearestPharmacyRow{}
+	for rows.Next() {
+		var i GetNearestPharmacyRow
+		if err := rows.Scan(&i.ID, &i.Text, &i.LocationWkt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

@@ -12,6 +12,7 @@ import (
 	mathrand "math/rand"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -41,10 +42,11 @@ type ExtractedQueryParams struct {
 }
 
 type ChatSession struct {
-	ID        string
-	History   []*genai.Content
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID              string
+	History         []*genai.Content
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	CurrentPharmacy *PharmacyContext // Track current pharmacy context
 }
 
 type Server struct {
@@ -57,46 +59,6 @@ type Server struct {
 	db                   *db.Queries
 	chatSessions         map[string]*ChatSession
 	sessionMutex         sync.RWMutex
-}
-
-// Nearest implements ServerInterface.
-func (s *Server) Nearest(w http.ResponseWriter, r *http.Request) {
-	bodyBytes, err := io.ReadAll(r.Body)
-	defer func() { _ = r.Body.Close() }()
-	if err != nil {
-		http.Error(w, `{"message": "could not read request body"}`, http.StatusBadRequest)
-		log.Printf("[ConfirmEmail] Error reading request body: %v", err)
-		return
-	}
-
-	var nearestRequest *NearestRequest
-	err = json.Unmarshal(bodyBytes, &nearestRequest)
-
-	if err != nil {
-		http.Error(w, `{"message": "could not bind request body: `+err.Error()+`"}`, http.StatusBadRequest)
-		log.Printf("[ConfirmEmail] Error unmarshalling request body: %v", err)
-		return
-	}
-
-	getNearestPharmacyParams := &db.GetNearestPharmacyParams{
-		StMakepoint:   nearestRequest.Longitude,
-		StMakepoint_2: nearestRequest.Latitude,
-	}
-
-	nearestPharm, err := s.db.GetNearestPharmacy(r.Context(), *getNearestPharmacyParams)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no pharmacies found", http.StatusNotFound)
-			return
-		}
-		log.Printf("[Nearest] Database error: %v", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(nearestPharm.Text)
 }
 
 func NewServer(jwtAuth tools.Authenticator, client *genai.Client, clientEmbs *genaiembs.Client, chromaDBClient chromago.Client, chromaCollection string, db *db.Queries) *Server {
@@ -713,10 +675,11 @@ func (s *Server) getOrCreateSession(sessionID string) *ChatSession {
 	}
 
 	session := &ChatSession{
-		ID:        sessionID,
-		History:   make([]*genai.Content, 0),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:              sessionID,
+		History:         make([]*genai.Content, 0),
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
+		CurrentPharmacy: nil,
 	}
 	s.chatSessions[sessionID] = session
 	return session
@@ -739,52 +702,166 @@ func (s *Server) cleanupSessions() {
 	}()
 }
 
+// Add this struct to track pharmacy context
+type PharmacyContext struct {
+	Name   string
+	Number string
+	City   string
+	Street string
+	House  string
+}
+
+// Add this helper function to detect if user is asking about a different pharmacy
+func (s *Server) isNewPharmacyQuery(current *PharmacyContext, extracted ExtractedQueryParams) bool {
+	if current == nil {
+		return true
+	}
+
+	// If user provides any new specific identifier, it's likely a new query
+	if extracted.PharmacyName != "" && extracted.PharmacyName != current.Name {
+		return true
+	}
+	if extracted.PharmacyNumber != "" && extracted.PharmacyNumber != current.Number {
+		return true
+	}
+	// If user provides a completely different address
+	if extracted.City != "" && extracted.City != current.City {
+		return true
+	}
+	if extracted.Street != "" && extracted.Street != current.Street &&
+		(extracted.City != "" || extracted.HouseNumber != "") {
+		return true
+	}
+
+	return false
+}
+
+// Add this helper to merge context for follow-up questions
+func (s *Server) mergePharmacyContext(current *PharmacyContext, extracted ExtractedQueryParams) ExtractedQueryParams {
+	merged := extracted
+
+	// Only merge if we're continuing the same pharmacy conversation
+	if current != nil {
+		if merged.PharmacyName == "" {
+			merged.PharmacyName = current.Name
+		}
+		if merged.PharmacyNumber == "" {
+			merged.PharmacyNumber = current.Number
+		}
+		if merged.City == "" {
+			merged.City = current.City
+		}
+		if merged.Street == "" {
+			merged.Street = current.Street
+		}
+		if merged.HouseNumber == "" {
+			merged.HouseNumber = current.House
+		}
+	}
+
+	return merged
+}
+
 // ---------------------------------------
 
 func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	err := r.ParseMultipartForm(32 << 20) // 32MB max memory
-	if err != nil {
-		log.Printf("[Chat] Error parsing multipart form: %v", err)
-		http.Error(w, `{"message": "invalid multipart form: `+err.Error()+`"}`, http.StatusBadRequest)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		log.Printf("[Chat] multipart parse error: %v", err)
+		http.Error(w, `{"message":"invalid multipart form"}`, http.StatusBadRequest)
 		return
 	}
 
-	sessionID := r.FormValue("session_id")
-	if sessionID == "" {
-		sessionID = generateSessionID() // implement this to generate unique IDs
+	// --------------- 1. GEO COORDINATES ----------------
+	latStr := r.FormValue("latitude")
+	lonStr := r.FormValue("longitude")
+
+	var userLat, userLon float64
+	if latStr != "" && lonStr != "" {
+		var errLat, errLon error
+		userLat, errLat = strconv.ParseFloat(latStr, 64)
+		userLon, errLon = strconv.ParseFloat(lonStr, 64)
+		if errLat != nil || errLon != nil {
+			log.Printf("[Chat] bad lat/lon: %s %s", latStr, lonStr)
+			http.Error(w, `{"message":"invalid latitude or longitude"}`, http.StatusBadRequest)
+			return
+		}
 	}
 
+	// --------------- 2. SESSION HANDLING ---------------
+	sessionID := r.FormValue("session_id")
+	if sessionID == "" {
+		sessionID = generateSessionID()
+	}
 	session := s.getOrCreateSession(sessionID)
 
-	log.Printf("[Chat] Session ID: %s, History length: %d", sessionID, len(session.History))
-
+	// --------------- 3. AUDIO FILE ----------------------
 	audioFile, fileHeader, err := r.FormFile("audio")
 	if err != nil {
-		log.Printf("[Chat] Error getting audio file from form: %v", err)
-		http.Error(w, `{"message": "audio file is required: `+err.Error()+`"}`, http.StatusBadRequest)
+		log.Printf("[Chat] audio file error: %v", err)
+		http.Error(w, `{"message":"audio file is required"}`, http.StatusBadRequest)
 		return
 	}
 	defer audioFile.Close()
 
-	log.Printf("[Chat] Received audio file: %s, Size: %d, MIME: %s",
-		fileHeader.Filename, fileHeader.Size, fileHeader.Header.Get("Content-Type"))
-
 	audioBytes, err := io.ReadAll(audioFile)
 	if err != nil {
-		log.Printf("[Chat] Error reading audio file into bytes: %v", err)
-		http.Error(w, `{"message": "failed to read audio file: `+err.Error()+`"}`, http.StatusInternalServerError)
+		log.Printf("[Chat] audio read error: %v", err)
+		http.Error(w, `{"message":"failed to read audio"}`, http.StatusInternalServerError)
 		return
 	}
-
-	audioBlob := genai.Blob{
-		MIMEType: fileHeader.Header.Get("Content-Type"),
-		Data:     audioBytes,
-	}
+	audioBlob := genai.Blob{MIMEType: fileHeader.Header.Get("Content-Type"), Data: audioBytes}
 	audioDataPart := genai.Part{InlineData: &audioBlob}
 
-	// 1. Define the tool for Gemini
+	// --------------- 4. SYSTEM PROMPT -------------------
+	prompt1Text := `Ты — русскоязычный голосовой ассистент для поиска аптек.
+
+──────────────── 1. Когда вызывать инструмент ────────────────
+find_nearest_pharmacy  
+• фразы «ближайшая / рядом / поблизости / возле меня / к моему местоположению»  
+• в запросе НЕТ других параметров  
+
+find_pharmacies  
+• присутствует слово аптека / pharmacy / фарм / лекарство / препарат  
+  ИЛИ указан ≥1 параметр (название, номер, город, улица, дом, телефон)  
+• вызывай даже по одному параметру  
+
+иначе — коротко попроси уточнение  
+
+──────────────── 2. Как вызывать ────────────────
+Когда нужен инструмент, assistant-сообщение = только functionCall без текста.  
+
+──────────────── 3. После ответа инструмента ────────────────
+Формат любого речевого ответа: 1–2 предложения, без спецсимволов, телефоны +375 (XX) XXX-XX-XX, паузы только точкой.  
+
+find_nearest_pharmacy (возвращает 3 аптеки) →  
+«Ближайшие аптеки: <аптека 1>. <аптека 2>. <аптека 3>.»  
+Каждая аптека: «аптека <название> номер <номер> <город> <улица> дом <дом> телефон <телефон>».  
+
+find_pharmacies →  
+• 1 аптека  →  «Аптека <название> номер <номер>. <город> <улица> дом <дом>. Телефон: <телефон>.»  
+• >1 аптек →  спроси один уточняющий параметр (дом → номер → улица → город)  
+• 0 аптек →  «Извините. аптека не найдена. Уточните параметры.»  
+
+──────────────── 4. Строго запрещено ────────────────
+• Выдумывать или изменять данные аптек.  
+  Данные адреса/телефона/названия/номера МОЖНО произносить ТОЛЬКО если они пришли в FunctionResponse от инструмента.  
+• Выводить необработанную транскрипцию.  
+• Писать «вызываю инструмент …».  
+• Показывать >3 аптек за один ответ.  
+• Смешивать данные разных аптек.  
+
+Если достоверных данных нет → спроси уточнение или извинись, но не придумывай.  
+
+──────────────── 5. Память ────────────────
+Новый идентификатор (название/номер/адрес) = новая сессия; без идентификатора можешь опираться на предыдущую.  
+
+Координаты пользователя: LAT={{LAT}}, LON={{LON}}`
+	prompt1Text = strings.ReplaceAll(prompt1Text, "{{LAT}}", fmt.Sprintf("%f", userLat))
+	prompt1Text = strings.ReplaceAll(prompt1Text, "{{LON}}", fmt.Sprintf("%f", userLon))
+
+	// Define the tool
 	findPharmacyTool := &genai.Tool{
 		FunctionDeclarations: []*genai.FunctionDeclaration{{
 			Name:        "find_pharmacies",
@@ -792,189 +869,133 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
-					"user_query_transcription": {Type: genai.TypeString, Description: "The full transcribed text of the user's audio query. This field is mandatory. Example: 'Найди аптеку номер 5 на улице Ленина в Минске'"},
-					"pharmacy_name":            {Type: genai.TypeString, Description: "Name of the pharmacy, e.g., 'Планета Здоровья', 'Adel'. Do not include generic prefixes like 'Аптека '. Optional."},
-					"pharmacy_number":          {Type: genai.TypeString, Description: "Number of the pharmacy, e.g., '10', '25'. Do not include generic prefixes like 'Номер аптеки '. Optional."},
-					"city":                     {Type: genai.TypeString, Description: "City name, e.g., 'Минск', 'Гомель'. Do not include generic prefixes like 'город '. Optional."},
-					"street":                   {Type: genai.TypeString, Description: "Street name, e.g., 'Ленина', 'Советская'. Do not include generic prefixes like 'улица '. Optional."},
-					"house_number":             {Type: genai.TypeString, Description: "House number, e.g., '15', '23а'. Optional."},
+					"user_query_transcription": {Type: genai.TypeString, Description: "The full transcribed text of the user's audio query. This field is mandatory."},
+					"pharmacy_name":            {Type: genai.TypeString, Description: "Name of the pharmacy from current query only. Optional."},
+					"pharmacy_number":          {Type: genai.TypeString, Description: "Number of the pharmacy from current query only. Optional."},
+					"city":                     {Type: genai.TypeString, Description: "City name from current query only. Optional."},
+					"street":                   {Type: genai.TypeString, Description: "Street name from current query only. Optional."},
+					"house_number":             {Type: genai.TypeString, Description: "House number from current query only. Optional."},
 				},
 				Required: []string{"user_query_transcription"},
 			},
 		}},
 	}
 
-	// 2. Prepare GenerateContentConfig for creating the chat session with tools
+	findNearestTool := &genai.Tool{
+		FunctionDeclarations: []*genai.FunctionDeclaration{{
+			Name:        "find_nearest_pharmacy",
+			Description: "Returns the three closest pharmacies to the user's coordinates.",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"latitude":  {Type: genai.TypeNumber},
+					"longitude": {Type: genai.TypeNumber},
+				},
+				Required: []string{"latitude", "longitude"},
+			},
+		}},
+	}
+
 	chatConfig := &genai.GenerateContentConfig{
-		Tools: []*genai.Tool{findPharmacyTool},
-		// You can specify ToolConfig if needed, e.g., to force a function call or set a specific mode.
-		// Example:
+		Tools: []*genai.Tool{findPharmacyTool, findNearestTool},
 		ToolConfig: &genai.ToolConfig{
 			FunctionCallingConfig: &genai.FunctionCallingConfig{
-				Mode: genai.FunctionCallingConfigModeAuto, // Or ANY, NONE
+				Mode: genai.FunctionCallingConfigModeAuto,
 			},
 		},
 	}
 
-	// Start a new chat session using s.genaiClient.Chats.Create
-	// Pass chatConfig here to enable tools for this session.
-	// The 'history' argument can be nil for a new chat.
-	chatSession, err := s.genaiClient.Chats.Create(ctx, s.chatModel, chatConfig, session.History)
+	// --------------- 6. HISTORY MANAGEMENT --------------
+	var chatHistory []*genai.Content
+	if session.CurrentPharmacy != nil {
+		if len(session.History) > 6 {
+			chatHistory = session.History[len(session.History)-6:]
+		} else {
+			chatHistory = session.History
+		}
+	}
+
+	chatSession, err := s.genaiClient.Chats.Create(ctx, s.chatModel, chatConfig, chatHistory)
 	if err != nil {
-		log.Printf("[Chat] Error creating chat session: %v", err)
-		http.Error(w, `{"message": "failed to initialize AI chat: `+err.Error()+`"}`, http.StatusInternalServerError)
+		log.Printf("[Chat] LLM session error: %v", err)
+		http.Error(w, `{"message":"failed to init AI chat"}`, http.StatusInternalServerError)
 		return
 	}
 
-	// 3. Construct the first message to the LLM (prompt + audio)
-	prompt1Text := `Ты русскоязычный голосовой помощник для поиска аптек. **Никогда не возвращай пользователю транскрипцию без обработки.**
+	promptPart := genai.Part{Text: prompt1Text}
+	initialUserParts := []genai.Part{promptPart, audioDataPart}
 
-1. Основная задача — находить аптеки по параметрам. Все ответы для синтеза речи:  
-   • Максимально коротко (1-2 предложения)  
-   • Без форматирования/спецсимволов  
-   • Телефоны: +375 (XX) XXX-XX-XX  
-   • Паузы только через точку  
-
-**2. ОБЯЗАТЕЛЬНЫЙ вызов find_pharmacies если:**  
-   • Есть слова: аптека/pharmacy/фарм/лекарство/препарат **ИЛИ**  
-   • Упомянут хотя бы один параметр:  
-     - название аптеки (Искомет, Диалпро)  
-     - номер аптеки  
-     - адрес (город, улица, дом)  
-     - телефон  
-   **• Даже если запрос — утверждение или фрагмент ("Аптека 5 на Немиге", "Телефон Искомет")**  
-   • Исключение: явно не поисковые контексты ("Работаю в аптеке")  
-
-**3. Запрещено:**  
-   • Отвечать транскрипцией вместо вызова инструмента  
-   • Требовать уточнений если пользователь уже предоставил все данные  
-   • Выводить списки аптек  
-
-4. Алгоритм обработки запроса:  
-   a) **Точная транскрипция аудио:**  
-      - Числа цифрами (5)  
-      - Города в именительном падеже (Минск)  
-      - Без комментариев  
-   b) **Извлечение параметров из транскрипции:**  
-      - pharmacy_name (без слова "аптека")  
-      - pharmacy_number  
-      - city  
-      - street  
-      - house_number  
-   c) **Вызов find_pharmacies с:**  
-      - user_query_transcription  
-      - ТОЛЬКО явно указанными параметрами  
-
-**5. Критические уточнения вызова:**  
-   • При продолжении диалога объединяй контекст (если ранее спрашивал про город — добавь его)  
-   • **Всегда вызывай инструмент при наличии ключевых слов/параметров, даже если запрос кажется неполным**  
-
-6. Обработка результатов:  
-   a) **Уникальная аптека:**  
-      "Аптека <название> номер <номер>. <город> <улица> дом <дом>. Телефон: <телефон>."  
-      • Пропуск отсутствующих полей  
-   b) **Несколько вариантов:**  
-      1) Определи цель запроса (что хочет узнать пользователь: название/телефон/адрес?)  
-      2) **Уточни ТОЛЬКО различающиеся параметры НЕ являющиеся целью:**  
-         - Приоритет: house_number → pharmacy_number → street → city  
-         Пример: "Уточните номер дома."  
-   c) **Нет результатов:**  
-      "Извините. аптека не найдена. Уточните параметры."  
-
-**7. Фильтр уникальности (5-bis):**  
-   • Считай запись уникальной при совпадении ВСЕХ указанных пользователем параметров после нормализации:  
-     - Игнорировать регистр/пробелы/дефисы  
-     - Орфографические ошибки (Левенштейн ≤ 2)  
-   • **Даже при множественном ответе от инструмента — выводи только первую подходящую запись**  
-
-8. Краткость ответа:  
-   • Максимум 2 предложения  
-   • При уточнении — одно предложение  
-   Пример ошибки: ❌ "Вы сказали: Аптека 25 на Ленина" → ✅ *вызов инструмента*`
-	promptTextPart := genai.Part{Text: prompt1Text}
-	initialUserParts := []genai.Part{promptTextPart, audioDataPart}
-
-	// 4. Send the first message to LLM using the chatSession
-	log.Println("[Chat] Sending first message to LLM (transcription & tool use attempt)...")
+	log.Println("[Chat] LLM round 1…")
 	resp1, err := chatSession.SendMessage(ctx, initialUserParts...)
 	if err != nil {
-		log.Printf("[Chat] Error in first LLM call: %v", err)
-		http.Error(w, `{"message": "failed to process audio: `+err.Error()+`"}`, http.StatusInternalServerError)
+		log.Printf("[Chat] LLM round-1 error: %v", err)
+		http.Error(w, `{"message":"audio processing failed"}`, http.StatusInternalServerError)
 		return
 	}
 
-	// Add user message to history
-	// Convert []genai.Part to []*genai.Part
-	userPartsPtrs := make([]*genai.Part, len(initialUserParts))
-	for i := range initialUserParts {
-		userPartsPtrs[i] = &initialUserParts[i]
-	}
-	userContent := &genai.Content{
-		Role:  "user",
-		Parts: userPartsPtrs,
-	}
-	session.History = append(session.History, userContent)
+	// --------------- 7. PARSE FIRST LLM REPLY -----------
+	var (
+		userQuery               string
+		extractedParamsFromTool ExtractedQueryParams
+		functionCallToExecute   *genai.FunctionCall
+		assistantResponseText   string
+	)
 
-	// 5. Process LLM's first response
-	if resp1 == nil || len(resp1.Candidates) == 0 || resp1.Candidates[0].Content == nil {
-		log.Println("[Chat] LLM first response is empty or invalid.")
-		http.Error(w, `{"message": "failed to get a response from AI"}`, http.StatusInternalServerError)
-		return
-	}
-
-	llmFirstResponseCandidate := resp1.Candidates[0]
-	var userQuery string
-	var extractedParamsFromTool ExtractedQueryParams
-	var functionCallToExecute *genai.FunctionCall
-
-	if llmFirstResponseCandidate.Content != nil {
-		for _, part := range llmFirstResponseCandidate.Content.Parts {
-			if part.FunctionCall != nil {
-				functionCallToExecute = part.FunctionCall
+	if resp1 != nil && len(resp1.Candidates) > 0 && resp1.Candidates[0].Content != nil {
+		for _, p := range resp1.Candidates[0].Content.Parts {
+			if p.FunctionCall != nil {
+				functionCallToExecute = p.FunctionCall
 				break
 			}
 		}
 	}
 
-	var assistantResponseText string
-
-	if functionCallToExecute != nil && functionCallToExecute.Name == "find_pharmacies" {
-		log.Printf("[Chat] LLM requested to call function: %s with args: %v", functionCallToExecute.Name, functionCallToExecute.Args)
+	// --------------- 8. TOOL EXECUTION SWITCH ----------
+	switch {
+	// ------- find_pharmacies ---------------------------
+	case functionCallToExecute != nil && functionCallToExecute.Name == "find_pharmacies":
+		log.Println("[Chat] LLM round 1 - tool: find_pharmacies")
 		args := functionCallToExecute.Args
-		if t, ok := args["user_query_transcription"].(string); ok && t != "" {
+		if t, ok := args["user_query_transcription"].(string); ok {
 			userQuery = t
+		}
+		if v, ok := args["pharmacy_name"].(string); ok {
+			extractedParamsFromTool.PharmacyName = v
+		}
+		if v, ok := args["pharmacy_number"].(string); ok {
+			extractedParamsFromTool.PharmacyNumber = v
+		}
+		if v, ok := args["city"].(string); ok {
+			extractedParamsFromTool.City = v
+		}
+		if v, ok := args["street"].(string); ok {
+			extractedParamsFromTool.Street = v
+		}
+		if v, ok := args["house_number"].(string); ok {
+			extractedParamsFromTool.HouseNumber = v
+		}
+
+		// context merge / reset
+		if s.isNewPharmacyQuery(session.CurrentPharmacy, extractedParamsFromTool) {
+			session.CurrentPharmacy = &PharmacyContext{
+				Name:   extractedParamsFromTool.PharmacyName,
+				Number: extractedParamsFromTool.PharmacyNumber,
+				City:   extractedParamsFromTool.City,
+				Street: extractedParamsFromTool.Street,
+				House:  extractedParamsFromTool.HouseNumber,
+			}
 		} else {
-			log.Println("[Chat] Error: 'user_query_transcription' missing, empty, or not a string in function call args.")
-			http.Error(w, `{"message": "AI failed to provide transcription for search."}`, http.StatusInternalServerError)
-			return
+			extractedParamsFromTool = s.mergePharmacyContext(session.CurrentPharmacy, extractedParamsFromTool)
 		}
-		log.Printf("[Chat] Transcribed query from tool args: %s", userQuery)
 
-		if name, ok := args["pharmacy_name"].(string); ok {
-			extractedParamsFromTool.PharmacyName = name
-		}
-		if num, ok := args["pharmacy_number"].(string); ok {
-			extractedParamsFromTool.PharmacyNumber = num
-		}
-		if city, ok := args["city"].(string); ok {
-			extractedParamsFromTool.City = city
-		}
-		if street, ok := args["street"].(string); ok {
-			extractedParamsFromTool.Street = street
-		}
-		if house, ok := args["house_number"].(string); ok {
-			extractedParamsFromTool.HouseNumber = house
-		}
-		log.Printf("[Chat] Extracted Params via Function Call: %+v", extractedParamsFromTool)
-
-		// --- Perform ChromaDB query ---
+		// ---------- Chroma vector search (same as before) ----------
 		collection, err := s.chromaDBClient.GetCollection(ctx, s.chromaCollectionName, chromago.WithEmbeddingFunctionGet(s.ef))
 		if err != nil {
-			log.Printf("[Chat] Error getting ChromaDB collection: %v", err)
-			http.Error(w, `{"message": "failed to access pharmacy database: `+err.Error()+`"}`, http.StatusInternalServerError)
+			log.Printf("[Chat] Chroma collection error: %v", err)
+			http.Error(w, `{"message":"pharmacy DB access failed"}`, http.StatusInternalServerError)
 			return
 		}
-		// 1. строим векторный текст = «Минск Жудро 16 <имя> номер 30»
+
 		var queryTextBuilder strings.Builder
 		ep := extractedParamsFromTool
 		if ep.City != "" {
@@ -993,7 +1014,6 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 			queryTextBuilder.WriteString("номер " + ep.PharmacyNumber)
 		}
 
-		// 2. строгий AND-фильтр по «географии»
 		var strictClauses []chromago.WhereClause
 		if ep.City != "" {
 			strictClauses = append(strictClauses, chromago.EqString("city", ep.City))
@@ -1011,103 +1031,93 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 			strictClauses = append(strictClauses, chromago.EqString("pharmacy_number", ep.PharmacyNumber))
 		}
 
+		log.Printf("[Chat] RAG Context for LLM (call 1): %s", queryTextBuilder.String())
+
 		queryOpts := []chromago.CollectionQueryOption{
 			chromago.WithQueryTexts(strings.TrimSpace(queryTextBuilder.String())),
 			chromago.WithNResults(10),
 		}
 		if len(strictClauses) > 0 {
-			strictFilter := strictClauses[0]
+			filter := strictClauses[0]
 			if len(strictClauses) > 1 {
-				strictFilter = chromago.And(strictClauses...)
+				filter = chromago.And(strictClauses...)
 			}
-			queryOpts = append(queryOpts, chromago.WithWhereQuery(strictFilter))
+			queryOpts = append(queryOpts, chromago.WithWhereQuery(filter))
 		}
 		queryOpts = append(queryOpts, chromago.WithIncludeQuery(chromago.IncludeDocuments, chromago.IncludeMetadatas))
 
-		retrievedDocs, err := collection.Query(ctx, queryOpts...)
+		retrieved, err := collection.Query(ctx, queryOpts...)
 		if err != nil {
-			log.Printf("[Chat] Error querying ChromaDB: %v", err)
-			http.Error(w, `{"message": "failed to query pharmacy database: `+err.Error()+`"}`, http.StatusInternalServerError)
+			log.Printf("[Chat] Chroma query error: %v", err)
+			http.Error(w, `{"message":"pharmacy query failed"}`, http.StatusInternalServerError)
 			return
 		}
 
-		// 3. fallback, если строгий поиск ничего не вернул
-		if len(retrievedDocs.GetDocumentsGroups()[0]) == 0 {
-			log.Println("[Chat] Strict AND-поиск пуст – делаем fallback OR.")
-			var looseClauses []chromago.WhereClause
+		// fallback OR search if strict no-hit
+		if len(retrieved.GetDocumentsGroups()[0]) == 0 {
+			var orClauses []chromago.WhereClause
 			if ep.PharmacyName != "" {
-				looseClauses = append(looseClauses, chromago.EqString("pharmacy_name", ep.PharmacyName))
+				orClauses = append(orClauses, chromago.EqString("pharmacy_name", ep.PharmacyName))
 			}
 			if ep.PharmacyNumber != "" {
-				looseClauses = append(looseClauses, chromago.EqString("pharmacy_number", ep.PharmacyNumber))
+				orClauses = append(orClauses, chromago.EqString("pharmacy_number", ep.PharmacyNumber))
 			}
 			if ep.City != "" {
-				looseClauses = append(looseClauses, chromago.EqString("city", ep.City))
+				orClauses = append(orClauses, chromago.EqString("city", ep.City))
 			}
 			if ep.Street != "" {
-				looseClauses = append(looseClauses, chromago.EqString("street", ep.Street))
+				orClauses = append(orClauses, chromago.EqString("street", ep.Street))
 			}
 			if ep.HouseNumber != "" {
-				looseClauses = append(looseClauses, chromago.EqString("house_number", ep.HouseNumber))
+				orClauses = append(orClauses, chromago.EqString("house_number", ep.HouseNumber))
 			}
 
-			// тот же queryText, но OR-фильтр
 			fallbackOpts := []chromago.CollectionQueryOption{
 				chromago.WithQueryTexts(strings.TrimSpace(queryTextBuilder.String())),
 				chromago.WithNResults(10),
 				chromago.WithIncludeQuery(chromago.IncludeDocuments, chromago.IncludeMetadatas),
 			}
-			if len(looseClauses) > 0 {
-				fallbackOpts = append(fallbackOpts, chromago.WithWhereQuery(chromago.Or(looseClauses...)))
+			if len(orClauses) > 0 {
+				fallbackOpts = append(fallbackOpts, chromago.WithWhereQuery(chromago.Or(orClauses...)))
 			}
-			retrievedDocs, err = collection.Query(ctx, fallbackOpts...)
+			retrieved, err = collection.Query(ctx, fallbackOpts...)
 			if err != nil {
-				log.Printf("[Chat] Error querying ChromaDB fallback: %v", err)
-				http.Error(w, `{"message": "failed to query pharmacy database fallback: `+err.Error()+`"}`, http.StatusInternalServerError)
+				log.Printf("[Chat] Chroma fallback error: %v", err)
+				http.Error(w, `{"message":"pharmacy query fallback failed"}`, http.StatusInternalServerError)
 				return
 			}
 		}
 
-		// 4. post-фаззи-фильтр по имени/номеру (≤2 ошибки)
+		// post-filter fuzzy
 		var finalDocs []chromago.Document
-		docsGroups := retrievedDocs.GetDocumentsGroups()
-		metaGroups := retrievedDocs.GetMetadatasGroups()
-		for gi, metaGroup := range metaGroups {
-			docGroup := docsGroups[gi]
-			for di, meta := range metaGroup {
-				good := true
+		dg := retrieved.GetDocumentsGroups()
+		mg := retrieved.GetMetadatasGroups()
+		for gi, metas := range mg {
+			docs := dg[gi]
+			for di, meta := range metas {
+				ok := true
 				if ep.PharmacyName != "" {
-					meta, _ := meta.GetString("pharmacy_name")
-					if !fuzzyEqual(meta, ep.PharmacyName, 4) {
-						good = false
-					}
+					val, _ := meta.GetString("pharmacy_name")
+					ok = ok && fuzzyEqual(val, ep.PharmacyName, 4)
 				}
-				if good && ep.PharmacyNumber != "" {
-					meta, _ := meta.GetString("pharmacy_number")
-					if !fuzzyEqual(meta, ep.PharmacyNumber, 1) {
-						good = false
-					}
+				if ok && ep.PharmacyNumber != "" {
+					val, _ := meta.GetString("pharmacy_number")
+					ok = ok && fuzzyEqual(val, ep.PharmacyNumber, 1)
 				}
-				if good && ep.City != "" {
-					meta, _ := meta.GetString("city")
-					if !fuzzyEqual(meta, ep.City, 2) {
-						good = false
-					}
+				if ok && ep.City != "" {
+					val, _ := meta.GetString("city")
+					ok = ok && fuzzyEqual(val, ep.City, 2)
 				}
-				if good && ep.Street != "" {
-					meta, _ := meta.GetString("street")
-					if !fuzzyEqual(meta, ep.Street, 2) {
-						good = false
-					}
+				if ok && ep.Street != "" {
+					val, _ := meta.GetString("street")
+					ok = ok && fuzzyEqual(val, ep.Street, 2)
 				}
-				if good && ep.HouseNumber != "" {
-					meta, _ := meta.GetString("house_number")
-					if !fuzzyEqual(meta, ep.HouseNumber, 1) {
-						good = false
-					}
+				if ok && ep.HouseNumber != "" {
+					val, _ := meta.GetString("house_number")
+					ok = ok && fuzzyEqual(val, ep.HouseNumber, 1)
 				}
-				if good {
-					finalDocs = append(finalDocs, docGroup[di])
+				if ok {
+					finalDocs = append(finalDocs, docs[di])
 				}
 			}
 		}
@@ -1121,82 +1131,113 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 				rag.WriteString(fmt.Sprintf("%d. %s\n", i+1, d.ContentString()))
 				if i == 4 {
 					break
-				} // максимум 5 записей
+				}
 			}
 		}
-		if rag.Len() == 0 {
-			log.Println("[Chat] No relevant documents retrieved from ChromaDB or documents were empty.")
-			rag.WriteString("Информация по запросу не найдена в базе данных.")
-		}
+
 		log.Printf("[Chat] RAG Context for LLM (call 2): %s", rag.String())
-		// --- End ChromaDB query ---
 
-		funcResponseData := map[string]any{"search_results_summary": rag.String()}
-		fnResponse := genai.FunctionResponse{Name: functionCallToExecute.Name, Response: funcResponseData}
-		toolResponsePart := genai.Part{FunctionResponse: &fnResponse}
+		fnResp := genai.FunctionResponse{
+			Name:     "find_pharmacies",
+			Response: map[string]any{"search_results_summary": rag.String()},
+		}
+		toolPart := genai.Part{FunctionResponse: &fnResp}
 
-		// 6. Send the function response back to the LLM
-		log.Println("[Chat] Sending function response to LLM for final answer generation...")
-		resp2, err := chatSession.SendMessage(ctx, toolResponsePart)
+		log.Println("[Chat] LLM round 2 (find_pharmacies)…")
+		resp2, err := chatSession.SendMessage(ctx, toolPart)
 		if err != nil {
-			log.Printf("[Chat] Error in second LLM call (after function response): %v", err)
-			http.Error(w, `{"message": "failed to generate final response: `+err.Error()+`"}`, http.StatusInternalServerError)
+			log.Printf("[Chat] LLM round-2 error: %v", err)
+			http.Error(w, `{"message":"final answer failed"}`, http.StatusInternalServerError)
 			return
 		}
+		assistantResponseText = resp2.Text()
 
-		if resp2 == nil || len(resp2.Candidates) == 0 || resp2.Candidates[0].Content == nil || len(resp2.Candidates[0].Content.Parts) == 0 {
-			log.Println("[Chat] LLM second response (final) is empty or invalid.")
-			assistantResponseText = "Простите, я не смог сформировать ответ. Пожалуйста, попробуйте еще раз."
-		} else {
-			assistantResponseText = resp2.Text()
+		// ------- find_nearest_pharmacy ---------------------
+	case functionCallToExecute != nil && functionCallToExecute.Name == "find_nearest_pharmacy":
+		log.Println("[Chat] LLM round 1 - tool: find_nearest_pharmacy")
+
+		if userLat == 0 && userLon == 0 {
+			assistantResponseText = "Координаты не переданы. Невозможно найти ближайшую аптеку."
+			break
 		}
-	} else {
-		log.Println("[Chat] LLM did not request a function call. Trying to extract transcription and send to LLM for answer.")
+
+		getNearestPharmacy := &db.GetNearestPharmacyParams{
+			StMakepoint:   userLon,
+			StMakepoint_2: userLat,
+		}
+
+		nearestList, err := s.db.GetNearestPharmacy(ctx, *getNearestPharmacy)
+		if err != nil {
+			log.Printf("[Chat] nearest query error: %v", err)
+			http.Error(w, `{"message":"nearest pharmacy search failed"}`, http.StatusInternalServerError)
+			return
+		}
+		if len(nearestList) == 0 {
+			assistantResponseText = "Извините. аптека поблизости не найдена."
+			break
+		}
+
+		var summary strings.Builder
+		for i, p := range nearestList {
+			if i > 0 {
+				summary.WriteString("\n")
+			}
+			summary.WriteString(
+				p.Text,
+			)
+		}
+
+		fnResp := genai.FunctionResponse{
+			Name: "find_nearest_pharmacy",
+			Response: map[string]any{
+				"search_results_summary": summary.String(),
+			},
+		}
+		toolPart := genai.Part{FunctionResponse: &fnResp}
+
+		log.Println("[Chat] LLM round 2 (nearest)…")
+		resp2, err := chatSession.SendMessage(ctx, toolPart)
+		if err != nil {
+			log.Printf("[Chat] LLM round-2 nearest error: %v", err)
+			http.Error(w, `{"message":"final nearest answer failed"}`, http.StatusInternalServerError)
+			return
+		}
+		assistantResponseText = resp2.Text()
+
+	// ------- no tool -----------------------------------
+	default:
+		log.Println("[Chat] LLM round 1 - no tool")
 		assistantResponseText = resp1.Text()
 	}
 
-	// Final response handling
+	// --------------- 9. POST-PROCESS --------------------
 	if assistantResponseText == "" {
-		log.Println("[Chat] Assistant response is empty.")
-		finishReason := genai.FinishReasonStop
-		if len(resp1.Candidates) > 0 {
-			finishReason = resp1.Candidates[0].FinishReason
-		}
-		if finishReason != genai.FinishReasonStop && finishReason != genai.FinishReasonUnspecified {
-			log.Printf("[Chat] LLM finished with reason: %s", finishReason)
-			assistantResponseText = "Извините, я не могу обработать этот запрос из-за ограничений."
-		} else {
-			assistantResponseText = "Простите, я не смог обработать ваш запрос. Пожалуйста, попробуйте еще раз."
-		}
-	} else if strings.Contains(strings.ToLower(assistantResponseText), "не найден") ||
-		strings.Contains(strings.ToLower(assistantResponseText), "не могу найти") ||
-		(functionCallToExecute != nil && assistantResponseText == "Информация по запросу не найдена в базе данных.") {
-		log.Println("[Chat] Assistant response indicates no information found.")
-		assistantResponseText = "Простите, я не смог найти аптеку по вашему запросу. Пожалуйста, уточните информацию."
+		assistantResponseText = "Простите, я не смог обработать ваш запрос."
 	}
-
-	// Sanitize assistantResponseText: allow only letters, numbers, spaces, and common punctuation (.,!?":-)
 	re := regexp.MustCompile(`[^\p{L}\p{N}\s.,!?":\-]`)
 	assistantResponseText = re.ReplaceAllString(assistantResponseText, "")
 
-	assistantContent := &genai.Content{
-		Role:  "model",
-		Parts: []*genai.Part{{Text: assistantResponseText}},
+	// --------------- 10. HISTORY ------------------------
+	userPartsPtrs := make([]*genai.Part, len(initialUserParts))
+	for i := range initialUserParts {
+		userPartsPtrs[i] = &initialUserParts[i]
 	}
-	session.History = append(session.History, assistantContent)
+	session.History = append(session.History,
+		&genai.Content{Role: "user", Parts: userPartsPtrs},
+		&genai.Content{Role: "model", Parts: []*genai.Part{{Text: assistantResponseText}}},
+	)
+	if len(session.History) > 20 {
+		session.History = session.History[len(session.History)-20:]
+	}
 
-	response := map[string]string{
+	// --------------- 11. RESPONSE -----------------------
+	resp := map[string]string{
 		"transcription":      userQuery,
 		"assistant_response": assistantResponseText,
 		"session_id":         sessionID,
 	}
-
-	log.Printf("[Chat] Final assistant response: %s", assistantResponseText)
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("[Chat] Error encoding final response: %v", err)
-	}
+	json.NewEncoder(w).Encode(resp)
 }
 
 func generateSessionID() string {

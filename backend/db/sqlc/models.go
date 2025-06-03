@@ -8,6 +8,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Location struct {
+	ID       int32       `json:"id"`
+	Text     string      `json:"text"`
+	Location interface{} `json:"location"`
+}
+
 type User struct {
 	UserID       pgtype.UUID      `json:"user_id"`
 	Email        string           `json:"email"`

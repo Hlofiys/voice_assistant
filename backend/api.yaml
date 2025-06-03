@@ -460,6 +460,12 @@ paths:
                 session_id:
                   type: string
                   description: Unique session identifier for the conversation
+                latitude:
+                  type: string
+                  description: User's latitude
+                longitude:
+                  type: string
+                  description: User's longitude
       responses:
         "200":
           description: Response from voice assistant

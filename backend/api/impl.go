@@ -691,7 +691,7 @@ func validateChatHistory(history []*genai.Content) []*genai.Content {
 }
 
 // buildSystemPrompt creates the system prompt string with dynamic lat/lon.
-func buildSystemPrompt(lat, lon float64) string {
+func buildSystemPrompt(lat, lon float64, pc *PharmacyContext) string {
 	promptText := `Ты — русскоязычный голосовой ассистент для поиска аптек.
 
 ──────────────── 1. Когда вызывать инструмент ────────────────
@@ -737,7 +737,18 @@ find_pharmacies →
 Координаты пользователя: LAT={{LAT}}, LON={{LON}}`
 	promptText = strings.ReplaceAll(promptText, "{{LAT}}", fmt.Sprintf("%.6f", lat)) // Using %.6f for precision
 	promptText = strings.ReplaceAll(promptText, "{{LON}}", fmt.Sprintf("%.6f", lon))
-	return promptText
+	m := ""
+	if pc != nil {
+		m = fmt.Sprintf(`
+────────────── Текущий контекст (slot-memory) ──────────────
+название: %s
+номер:     %s
+город:     %s
+улица:     %s
+дом:       %s
+`, pc.Name, pc.Number, pc.City, pc.Street, pc.House)
+	}
+	return promptText + m
 }
 
 func (s *Server) getOrCreateSession(sessionID string) *ChatSession {
@@ -949,13 +960,11 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 				Mode: genai.FunctionCallingConfigModeAuto,
 			},
 		},
-		SystemInstruction: &genai.Content{Parts: []*genai.Part{{Text: buildSystemPrompt(userLat, userLon)}}},
+		SystemInstruction: &genai.Content{Parts: []*genai.Part{{Text: buildSystemPrompt(userLat, userLon, session.CurrentPharmacy)}}},
 	}
 
 	// --------------- 6. HISTORY MANAGEMENT --------------
 	chatSession, err := s.genaiClient.Chats.Create(ctx, s.chatModel, chatConfig, validateChatHistory(session.History))
-	log.Printf("[Chat] History for session %s: %v", session.ID, session.History)
-	log.Printf("[Chat] Validated history for session %s: %v", session.ID, validateChatHistory(session.History))
 
 	if err != nil {
 		log.Printf("[Chat] LLM session error: %v", err)
@@ -987,6 +996,8 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	resolved := false
 
 	// --------------- 8. TOOL EXECUTION SWITCH ----------
 	switch {
@@ -1173,6 +1184,8 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		resolved = len(finalDocs) == 1
+
 		log.Printf("[Chat] RAG Context for LLM (call 2): %s", rag.String())
 
 		fnResp := genai.FunctionResponse{
@@ -1242,6 +1255,7 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		assistantResponseText = resp2.Text()
+		resolved = true
 
 	// ------- return_transcription -----------------------
 	case functionCallToExecute != nil && functionCallToExecute.Name == "return_transcription":
@@ -1266,12 +1280,17 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 	assistantResponseText = re.ReplaceAllString(assistantResponseText, "")
 
 	// --------------- 10. HISTORY ------------------------
-	session.History = append(session.History,
-		&genai.Content{Role: "user", Parts: []*genai.Part{{Text: userQuery}}},
-		&genai.Content{Role: "model", Parts: []*genai.Part{{Text: assistantResponseText}}},
-	)
-	if len(session.History) > 8 {
-		session.History = session.History[len(session.History)-8:]
+	if resolved {
+		session.History = nil
+		session.CurrentPharmacy = nil
+	} else {
+		session.History = append(session.History,
+			&genai.Content{Role: "user", Parts: []*genai.Part{{Text: userQuery}}},
+			&genai.Content{Role: "model", Parts: []*genai.Part{{Text: assistantResponseText}}},
+		)
+		if len(session.History) > 8 {
+			session.History = session.History[len(session.History)-8:]
+		}
 	}
 
 	// --------------- 11. RESPONSE -----------------------

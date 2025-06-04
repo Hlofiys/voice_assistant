@@ -665,6 +665,31 @@ func fuzzyEqual(a, b string, maxDist int) bool {
 		levenshtein.DefaultOptions) <= maxDist
 }
 
+func validateChatHistory(history []*genai.Content) []*genai.Content {
+	var validHistory []*genai.Content
+	for _, content := range history {
+		if content == nil || len(content.Parts) == 0 {
+			continue
+		}
+
+		// Only keep text parts, discard others
+		var validParts []*genai.Part
+		for _, part := range content.Parts {
+			if part.Text != "" {
+				validParts = append(validParts, &genai.Part{Text: part.Text})
+			}
+		}
+
+		if len(validParts) > 0 {
+			validHistory = append(validHistory, &genai.Content{
+				Role:  content.Role,
+				Parts: validParts,
+			})
+		}
+	}
+	return validHistory
+}
+
 // buildSystemPrompt creates the system prompt string with dynamic lat/lon.
 func buildSystemPrompt(lat, lon float64) string {
 	promptText := `Ты — русскоязычный голосовой ассистент для поиска аптек.
@@ -721,6 +746,10 @@ func (s *Server) getOrCreateSession(sessionID string) *ChatSession {
 
 	if session, ok := s.chatSessions[sessionID]; ok {
 		session.UpdatedAt = time.Now()
+		if time.Since(session.CreatedAt) > 15*time.Minute {
+			session.History = nil
+			session.CreatedAt = time.Now()
+		}
 		return session
 	}
 
@@ -924,7 +953,10 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --------------- 6. HISTORY MANAGEMENT --------------
-	chatSession, err := s.genaiClient.Chats.Create(ctx, s.chatModel, chatConfig, session.History)
+	chatSession, err := s.genaiClient.Chats.Create(ctx, s.chatModel, chatConfig, validateChatHistory(session.History))
+	log.Printf("[Chat] History for session %s: %v", session.ID, session.History)
+	log.Printf("[Chat] Validated history for session %s: %v", session.ID, validateChatHistory(session.History))
+
 	if err != nil {
 		log.Printf("[Chat] LLM session error: %v", err)
 		http.Error(w, `{"message":"failed to init AI chat"}`, http.StatusInternalServerError)
@@ -1238,8 +1270,8 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 		&genai.Content{Role: "user", Parts: []*genai.Part{{Text: userQuery}}},
 		&genai.Content{Role: "model", Parts: []*genai.Part{{Text: assistantResponseText}}},
 	)
-	if len(session.History) > 20 {
-		session.History = session.History[len(session.History)-20:]
+	if len(session.History) > 8 {
+		session.History = session.History[len(session.History)-8:]
 	}
 
 	// --------------- 11. RESPONSE -----------------------

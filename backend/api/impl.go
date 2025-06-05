@@ -665,18 +665,107 @@ func fuzzyEqual(a, b string, maxDist int) bool {
 		levenshtein.DefaultOptions) <= maxDist
 }
 
+func validateChatHistory(history []*genai.Content) []*genai.Content {
+	var validHistory []*genai.Content
+	for _, content := range history {
+		if content == nil || len(content.Parts) == 0 {
+			continue
+		}
+
+		// Only keep text parts, discard others
+		var validParts []*genai.Part
+		for _, part := range content.Parts {
+			if part.Text != "" {
+				validParts = append(validParts, &genai.Part{Text: part.Text})
+			}
+		}
+
+		if len(validParts) > 0 {
+			validHistory = append(validHistory, &genai.Content{
+				Role:  content.Role,
+				Parts: validParts,
+			})
+		}
+	}
+	return validHistory
+}
+
+// buildSystemPrompt creates the system prompt string with dynamic lat/lon.
+func buildSystemPrompt(lat, lon float64, pc *PharmacyContext) string {
+	promptText := `Ты — русскоязычный голосовой ассистент для поиска аптек.
+
+──────────────── 1. Когда вызывать инструмент ────────────────
+find_nearest_pharmacy  
+• фразы «ближайшая / рядом / поблизости / возле меня / к моему местоположению»  
+• в запросе НЕТ других параметров  
+
+find_pharmacies  
+• присутствует слово аптека / pharmacy / фарм / лекарство / препарат  
+  ИЛИ указан ≥1 параметр (название, номер, город, улица, дом, телефон)  
+• вызывай даже по одному параметру  
+
+иначе — коротко попроси уточнение  
+
+──────────────── 2. Как вызывать ────────────────
+Когда нужен инструмент, assistant-сообщение = только functionCall без текста.  
+
+──────────────── 3. После ответа инструмента ────────────────
+Формат любого речевого ответа: 1–2 предложения, без спецсимволов, телефоны +375 (XX) XXX-XX-XX, паузы только точкой.  
+
+find_nearest_pharmacy (возвращает 3 аптеки) →  
+«Ближайшие аптеки: <аптека 1>. <аптека 2>. <аптека 3>.»  
+Каждая аптека: «аптека <название> номер <номер> <город> <улица> дом <дом> телефон <телефон>».  
+
+find_pharmacies →  
+• 1 аптека  →  «Аптека <название> номер <номер>. <город> <улица> дом <дом>. Телефон: <телефон>.»  
+• >1 аптек →  спроси один уточняющий параметр (дом → номер → улица → город)  
+• 0 аптек →  «Извините. аптека не найдена. Уточните параметры.»  
+
+──────────────── 4. Строго запрещено ────────────────
+• Выдумывать или изменять данные аптек.  
+  Данные адреса/телефона/названия/номера МОЖНО произносить ТОЛЬКО если они пришли в FunctionResponse от инструмента.  
+• Выводить необработанную транскрипцию.  
+• Писать «вызываю инструмент …».  
+• Показывать >3 аптек за один ответ.  
+• Смешивать данные разных аптек.  
+
+Если достоверных данных нет → спроси уточнение или извинись, но не придумывай.  
+
+──────────────── 5. Память ────────────────
+Новый идентификатор (название/номер/адрес) = новая сессия; без идентификатора можешь опираться на предыдущую.  
+
+Координаты пользователя: LAT={{LAT}}, LON={{LON}}`
+	promptText = strings.ReplaceAll(promptText, "{{LAT}}", fmt.Sprintf("%.6f", lat)) // Using %.6f for precision
+	promptText = strings.ReplaceAll(promptText, "{{LON}}", fmt.Sprintf("%.6f", lon))
+	m := ""
+	if pc != nil {
+		m = fmt.Sprintf(`
+────────────── Текущий контекст (slot-memory) ──────────────
+название: %s
+номер:     %s
+город:     %s
+улица:     %s
+дом:       %s
+`, pc.Name, pc.Number, pc.City, pc.Street, pc.House)
+	}
+	return promptText + m
+}
+
 func (s *Server) getOrCreateSession(sessionID string) *ChatSession {
 	s.sessionMutex.Lock()
 	defer s.sessionMutex.Unlock()
 
-	if session, exists := s.chatSessions[sessionID]; exists {
+	if session, ok := s.chatSessions[sessionID]; ok {
 		session.UpdatedAt = time.Now()
+		if time.Since(session.CreatedAt) > 15*time.Minute {
+			session.History = nil
+			session.CreatedAt = time.Now()
+		}
 		return session
 	}
 
 	session := &ChatSession{
 		ID:              sessionID,
-		History:         make([]*genai.Content, 0),
 		CreatedAt:       time.Now(),
 		UpdatedAt:       time.Now(),
 		CurrentPharmacy: nil,
@@ -814,53 +903,6 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 	audioBlob := genai.Blob{MIMEType: fileHeader.Header.Get("Content-Type"), Data: audioBytes}
 	audioDataPart := genai.Part{InlineData: &audioBlob}
 
-	// --------------- 4. SYSTEM PROMPT -------------------
-	prompt1Text := `Ты — русскоязычный голосовой ассистент для поиска аптек.
-
-──────────────── 1. Когда вызывать инструмент ────────────────
-find_nearest_pharmacy  
-• фразы «ближайшая / рядом / поблизости / возле меня / к моему местоположению»  
-• в запросе НЕТ других параметров  
-
-find_pharmacies  
-• присутствует слово аптека / pharmacy / фарм / лекарство / препарат  
-  ИЛИ указан ≥1 параметр (название, номер, город, улица, дом, телефон)  
-• вызывай даже по одному параметру  
-
-иначе — коротко попроси уточнение  
-
-──────────────── 2. Как вызывать ────────────────
-Когда нужен инструмент, assistant-сообщение = только functionCall без текста.  
-
-──────────────── 3. После ответа инструмента ────────────────
-Формат любого речевого ответа: 1–2 предложения, без спецсимволов, телефоны +375 (XX) XXX-XX-XX, паузы только точкой.  
-
-find_nearest_pharmacy (возвращает 3 аптеки) →  
-«Ближайшие аптеки: <аптека 1>. <аптека 2>. <аптека 3>.»  
-Каждая аптека: «аптека <название> номер <номер> <город> <улица> дом <дом> телефон <телефон>».  
-
-find_pharmacies →  
-• 1 аптека  →  «Аптека <название> номер <номер>. <город> <улица> дом <дом>. Телефон: <телефон>.»  
-• >1 аптек →  спроси один уточняющий параметр (дом → номер → улица → город)  
-• 0 аптек →  «Извините. аптека не найдена. Уточните параметры.»  
-
-──────────────── 4. Строго запрещено ────────────────
-• Выдумывать или изменять данные аптек.  
-  Данные адреса/телефона/названия/номера МОЖНО произносить ТОЛЬКО если они пришли в FunctionResponse от инструмента.  
-• Выводить необработанную транскрипцию.  
-• Писать «вызываю инструмент …».  
-• Показывать >3 аптек за один ответ.  
-• Смешивать данные разных аптек.  
-
-Если достоверных данных нет → спроси уточнение или извинись, но не придумывай.  
-
-──────────────── 5. Память ────────────────
-Новый идентификатор (название/номер/адрес) = новая сессия; без идентификатора можешь опираться на предыдущую.  
-
-Координаты пользователя: LAT={{LAT}}, LON={{LON}}`
-	prompt1Text = strings.ReplaceAll(prompt1Text, "{{LAT}}", fmt.Sprintf("%f", userLat))
-	prompt1Text = strings.ReplaceAll(prompt1Text, "{{LON}}", fmt.Sprintf("%f", userLon))
-
 	// Define the tool
 	findPharmacyTool := &genai.Tool{
 		FunctionDeclarations: []*genai.FunctionDeclaration{{
@@ -888,45 +930,50 @@ find_pharmacies →
 			Parameters: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
-					"latitude":  {Type: genai.TypeNumber},
-					"longitude": {Type: genai.TypeNumber},
+					"user_query_transcription": {Type: genai.TypeString, Description: "The full transcribed text of the user's audio query. This field is mandatory."},
+					"latitude":                 {Type: genai.TypeNumber, Description: "Latitude of the user's location. Mandatory."},
+					"longitude":                {Type: genai.TypeNumber, Description: "Longitude of the user's location. Mandatory."},
 				},
-				Required: []string{"latitude", "longitude"},
+				Required: []string{"user_query_transcription", "latitude", "longitude"},
+			},
+		}},
+	}
+
+	returnTranscriptionTool := &genai.Tool{
+		FunctionDeclarations: []*genai.FunctionDeclaration{{
+			Name:        "return_transcription",
+			Description: "Accepts the transcription of the user's audio query.",
+			Parameters: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"user_query_transcription": {Type: genai.TypeString, Description: "The full transcribed text of the user's audio query. This field is mandatory."},
+				},
+				Required: []string{"user_query_transcription"},
 			},
 		}},
 	}
 
 	chatConfig := &genai.GenerateContentConfig{
-		Tools: []*genai.Tool{findPharmacyTool, findNearestTool},
+		Tools: []*genai.Tool{findPharmacyTool, findNearestTool, returnTranscriptionTool},
 		ToolConfig: &genai.ToolConfig{
 			FunctionCallingConfig: &genai.FunctionCallingConfig{
 				Mode: genai.FunctionCallingConfigModeAuto,
 			},
 		},
+		SystemInstruction: &genai.Content{Parts: []*genai.Part{{Text: buildSystemPrompt(userLat, userLon, session.CurrentPharmacy)}}},
 	}
 
 	// --------------- 6. HISTORY MANAGEMENT --------------
-	var chatHistory []*genai.Content
-	if session.CurrentPharmacy != nil {
-		if len(session.History) > 6 {
-			chatHistory = session.History[len(session.History)-6:]
-		} else {
-			chatHistory = session.History
-		}
-	}
+	chatSession, err := s.genaiClient.Chats.Create(ctx, s.chatModel, chatConfig, validateChatHistory(session.History))
 
-	chatSession, err := s.genaiClient.Chats.Create(ctx, s.chatModel, chatConfig, chatHistory)
 	if err != nil {
 		log.Printf("[Chat] LLM session error: %v", err)
 		http.Error(w, `{"message":"failed to init AI chat"}`, http.StatusInternalServerError)
 		return
 	}
 
-	promptPart := genai.Part{Text: prompt1Text}
-	initialUserParts := []genai.Part{promptPart, audioDataPart}
-
 	log.Println("[Chat] LLM round 1…")
-	resp1, err := chatSession.SendMessage(ctx, initialUserParts...)
+	resp1, err := chatSession.SendMessage(ctx, audioDataPart)
 	if err != nil {
 		log.Printf("[Chat] LLM round-1 error: %v", err)
 		http.Error(w, `{"message":"audio processing failed"}`, http.StatusInternalServerError)
@@ -949,6 +996,8 @@ find_pharmacies →
 			}
 		}
 	}
+
+	resolved := false
 
 	// --------------- 8. TOOL EXECUTION SWITCH ----------
 	switch {
@@ -1135,6 +1184,8 @@ find_pharmacies →
 			}
 		}
 
+		resolved = len(finalDocs) == 1
+
 		log.Printf("[Chat] RAG Context for LLM (call 2): %s", rag.String())
 
 		fnResp := genai.FunctionResponse{
@@ -1178,6 +1229,7 @@ find_pharmacies →
 		}
 
 		var summary strings.Builder
+		summary.WriteString("Ближайшие аптеки(в своём ответе пиши каждую с новой строки):\n")
 		for i, p := range nearestList {
 			if i > 0 {
 				summary.WriteString("\n")
@@ -1203,6 +1255,16 @@ find_pharmacies →
 			return
 		}
 		assistantResponseText = resp2.Text()
+		resolved = true
+
+	// ------- return_transcription -----------------------
+	case functionCallToExecute != nil && functionCallToExecute.Name == "return_transcription":
+		log.Println("[Chat] LLM round 1 - tool: return_transcription")
+		args := functionCallToExecute.Args
+		if t, ok := args["user_query_transcription"].(string); ok {
+			userQuery = t
+		}
+		assistantResponseText = resp1.Text()
 
 	// ------- no tool -----------------------------------
 	default:
@@ -1218,16 +1280,17 @@ find_pharmacies →
 	assistantResponseText = re.ReplaceAllString(assistantResponseText, "")
 
 	// --------------- 10. HISTORY ------------------------
-	userPartsPtrs := make([]*genai.Part, len(initialUserParts))
-	for i := range initialUserParts {
-		userPartsPtrs[i] = &initialUserParts[i]
-	}
-	session.History = append(session.History,
-		&genai.Content{Role: "user", Parts: userPartsPtrs},
-		&genai.Content{Role: "model", Parts: []*genai.Part{{Text: assistantResponseText}}},
-	)
-	if len(session.History) > 20 {
-		session.History = session.History[len(session.History)-20:]
+	if resolved {
+		session.History = nil
+		session.CurrentPharmacy = nil
+	} else {
+		session.History = append(session.History,
+			&genai.Content{Role: "user", Parts: []*genai.Part{{Text: userQuery}}},
+			&genai.Content{Role: "model", Parts: []*genai.Part{{Text: assistantResponseText}}},
+		)
+		if len(session.History) > 8 {
+			session.History = session.History[len(session.History)-8:]
+		}
 	}
 
 	// --------------- 11. RESPONSE -----------------------

@@ -3,7 +3,6 @@ import { View, StyleSheet, TouchableOpacity, Platform } from "react-native";
 import { MicrophoneButton } from "../ui/buttons/microphone/MicrophoneButton";
 import { AnimatePresence, MotiView } from "moti";
 import * as FileSystem from "expo-file-system";
-import * as SecureStorage from "expo-secure-store";
 import { IconSymbol } from "../ui/IconSymbol";
 import { useRecordingHandler } from "@/hooks/audio/useRecordingHandler";
 import { TimeDisplay } from "./TimeDisplay";
@@ -72,6 +71,7 @@ export const AudioPlayerControls: FC<IAudioPlayerControlsProps> = (props) => {
         );
         console.log(info.size);
         await handleSend(userLocation ?? undefined, ({ data }) => {
+          console.log(data.assistant_response);
           setAssistantResponse(data.assistant_response ?? "");
           setTranscription(data.transcription ?? "");
           handleReset();

@@ -49,8 +49,8 @@ export const useRecordingHandler = () => {
     if (file) {
       try {
         await FileSystem.deleteAsync(file);
-        setFile("");
         player?.release();
+        setFile("");
       } catch (e) {
         console.warn("Не удалось удалить старый файл", e);
       }
@@ -71,24 +71,24 @@ export const useRecordingHandler = () => {
     pauseTimer(); // Останавливаем таймер (ставим на паузу) после остановки записи
     // Если нужно сбрасывать таймер после остановки записи, можно вызвать resetTimer()
 
-    await new Promise((r) => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, 1500));
     const recordedUri = audioRecorder.uri;
     if (recordedUri) {
       const fileInfo = await FileSystem.getInfoAsync(recordedUri);
       if (fileInfo.exists) {
-        await new Promise((r) => setTimeout(r, 200));
+        await new Promise((r) => setTimeout(r, 500));
         setFile(fileInfo.uri);
       } else {
         console.warn("Файл не существует:", recordedUri);
       }
     }
 
-    setIsRecording(false);  
-  }, [audioRecorder, pauseTimer]);
+    setIsRecording(false);
+  }, [audioRecorder, pauseTimer, FileSystem]);
 
   const deleteFile = async () => {
     if (file) {
-      player?.remove();
+      await player?.remove();
       await FileSystem.deleteAsync(file);
       setFile("");
       resetTimer();

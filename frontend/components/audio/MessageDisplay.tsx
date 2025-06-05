@@ -34,7 +34,10 @@ export default function MessageDisplay() {
 
   const words = useMemo(() => {
     if (!messages.assistant_response) return [];
-    return messages.assistant_response.trim().split(" ");
+
+    // return messages.assistant_response
+    return messages.assistant_response.split(/(\s+|\n)/g)
+      .filter((token) => token.trim() !== "" || token === "\n"); // оставляем перенос
   }, [messages.assistant_response]);
 
   useEffect(() => {
@@ -70,10 +73,12 @@ export default function MessageDisplay() {
     (ready: boolean) => setIsReadyToSend(ready),
     []
   );
-  const handleRecordingStatusChange = useCallback(
-    (status: boolean) => setIsRecording(status),
-    []
-  );
+  const handleRecordingStatusChange = useCallback((status: boolean) => {
+    if (status === true) {
+      pause();
+    }
+    setIsRecording(status);
+  }, []);
   const handleLoadingChange = useCallback(
     (loading: boolean) => setIsLoading(loading),
     []
@@ -165,19 +170,27 @@ export default function MessageDisplay() {
                   showsVerticalScrollIndicator={false}
                 >
                   <Text style={[styles.word, { width: "100%" }]}>Ответ:</Text>
-                  {words.slice(0, visibleWordCount).map((word, index) => (
-                    <MotiView
-                      key={`${word}-${index}`}
-                      from={{ opacity: 0, translateY: 10 }}
-                      animate={{ opacity: 1, translateY: 0 }}
-                      transition={{
-                        type: "timing",
-                        duration: 300,
-                      }}
-                    >
-                      <Text style={styles.word}>{word} </Text>
-                    </MotiView>
-                  ))}
+                  {words.slice(0, visibleWordCount).map((word, index) => {
+                    if (word === "\n") {
+                      return (
+                        <View
+                          key={`br-${index}`}
+                          style={{ width: "100%", height: 10 }}
+                        />
+                      );
+                    }
+
+                    return (
+                      <MotiView
+                        key={`${word}-${index}`}
+                        from={{ opacity: 0, translateY: 10 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        transition={{ type: "timing", duration: 300 }}
+                      >
+                        <Text style={styles.word}>{word} </Text>
+                      </MotiView>
+                    );
+                  })}
                 </ScrollView>
                 <TouchableOpacity
                   onPress={() => {

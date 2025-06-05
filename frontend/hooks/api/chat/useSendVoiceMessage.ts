@@ -12,12 +12,12 @@ export const useSendVoiceMessage = (): {
     variables: IChatProps,
     options?: {
       onSuccess?: (
-        data: AxiosResponse<Chat200Response>,
+        data: AxiosResponse<Chat200Response> | undefined,
         variables: IChatProps,
         context: unknown
       ) => void;
     }
-  ) => Promise<AxiosResponse<Chat200Response>>;
+  ) => Promise<AxiosResponse<Chat200Response> | undefined>;
   isPending: boolean;
 } => {
   const { onError } = useErrorHook();
@@ -35,6 +35,7 @@ export const useSendVoiceMessage = (): {
     mutationKey: ["sendVoiceMessage"],
     mutationFn: ChatService.chat,
     onSuccess: (data, variables, context) => {
+      if (!!!data) return;
       if (data.data.session_id) {
         saveSession(data.data.session_id);
       }

@@ -31,7 +31,7 @@ class ChatService {
       mimeType,
       session_id,
       latitude: location?.latitude,
-      longitude: location?.longitude
+      longitude: location?.longitude,
     });
 
     return instance.post("/chat", formData, {
@@ -39,6 +39,7 @@ class ChatService {
         "Content-Type": "multipart/form-data",
         Accept: "application/json",
       },
+      // timeout: 10000,
     });
   }
 }

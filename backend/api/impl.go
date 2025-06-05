@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
@@ -692,8 +693,7 @@ func validateChatHistory(history []*genai.Content) []*genai.Content {
 
 // buildSystemPrompt creates the system prompt string with dynamic lat/lon.
 func buildSystemPrompt(lat, lon float64, pc *PharmacyContext) string {
-	promptText := `
-Ты — русскоязычный голосовой ассистент для поиска аптек.
+	promptText := `Ты — русскоязычный голосовой ассистент для поиска аптек.
 
 ──────────────── 1. Когда вызывать инструмент ────────────────
 find_nearest_pharmacy  
@@ -715,30 +715,33 @@ return_transcription
 
 ──────────────── 3. После ответа инструмента ────────────────
 Отвечай гибко и естественно, как человек. Адаптируйся к запросу пользователя.
-Номера телефонов возвращай в формате +375 (XX) XXX-XX-XX.
+Номера телефонов возвращай в формате: +375 (XX) XXX-XX-XX.
+
+Приоритеты при выборе формата ответа:
+
+1. Если пользователь ищет конкретную аптеку (номер, название):
+   • Если найдена одна аптека → выдай полную информацию о ней
+   • Если найдено несколько → задай уточняющие вопросы (дом → номер → улица → город)
+   • Пример: "аптека номер 3" - приоритет на уточнение, а не выдачу списка
+
+2. Если пользователь ищет аптеки по локации (улица, район):
+   • Если пользователь явно просит список/все аптеки → выдай нумерованный список (до 3)
+   • Если найдено 1-3 аптеки → можно выдать список без уточнений
+   • Если найдено больше 3 аптек → задай уточняющий вопрос
+   • Пример: "аптеки на улице Ленина" - можно выдать список (до 3)
 
 find_nearest_pharmacy (возвращает аптеки) →  
-• если пользователь просит все аптеки, перечисли их в формате нумерованного списка:
+"Ближайшие аптеки:" если пользователь просит несколько, или "Ближайшая аптека:" если одну.
+
+Формат для списка аптек (когда уместно):
 1. Аптека [название] номер [номер], [адрес], телефон [телефон]
 2. Аптека [название] номер [номер], [адрес], телефон [телефон]
 3. Аптека [название] номер [номер], [адрес], телефон [телефон]
 
-• если пользователь просит первую/любую аптеку, сообщи только о ней:
-"Ближайшая аптека [название] номер [номер]. [адрес]. Телефон: [телефон]."
+Формат для одной аптеки:
+"Аптека [название] номер [номер]. [город] [улица] дом [дом]. Телефон: [телефон]."
 
-• если пользователь не уточняет, предложи до 3 аптек:
-"Ближайшие аптеки:
-1. [название], [адрес]
-2. [название], [адрес]
-3. [название], [адрес]"
-
-find_pharmacies →  
-• 1 аптека → "Аптека [название] номер [номер]. [город] [улица] дом [дом]. Телефон: [телефон]."  
-• >1 аптек и пользователь просит все → перечисли в формате нумерованного списка (максимум 3)
-• >1 аптек и пользователь не уточняет → спроси один уточняющий параметр или предложи список из 3 подходящих аптек  
-• 0 аптек → "Извините, аптека не найдена. Уточните параметры."  
-
-Формат нумерованных списков: каждый пункт с новой строки, с цифрой и точкой.
+Если аптек не найдено → "Извините, аптека не найдена. Уточните параметры."
 
 ──────────────── 4. Строго запрещено ────────────────
 • Выдумывать или изменять данные аптек.  
@@ -868,6 +871,75 @@ func (s *Server) mergePharmacyContext(current *PharmacyContext, extracted Extrac
 	}
 
 	return merged
+}
+
+type pharmacyHint struct {
+	Name   string
+	Number string
+	Phone  string
+}
+
+var (
+	// «Аптека Здоровье номер 15.»  /  «1. Аптека N 42, …»
+	reNameNumber = regexp.MustCompile(`(?i)аптека\s+([\p{L}]+)?\s*(?:номер|№)\s*(\d{1,4})`)
+	// «Телефон: +375 (29) 123-45-67»
+	rePhone = regexp.MustCompile(`\d{3}\s*\d{2}\s*\d{3}[-\s]?\d{2}[-\s]?\d{2}`)
+)
+
+// quickly pull possible pharmacy id’s out of the model answer
+func extractPharmacyHints(text string) []pharmacyHint {
+	var out []pharmacyHint
+
+	for _, m := range reNameNumber.FindAllStringSubmatch(text, -1) {
+		out = append(out, pharmacyHint{
+			Name:   strings.TrimSpace(m[1]),
+			Number: strings.TrimSpace(m[2]),
+		})
+	}
+	for _, p := range rePhone.FindAllString(text, -1) {
+		// Convert phone format from 375 XX XXX-XX-XX to 80XXXXXXXX
+		phone := strings.ReplaceAll(p, " ", "")
+		phone = strings.ReplaceAll(phone, "-", "")
+		if strings.HasPrefix(phone, "375") && len(phone) == 12 {
+			phone = "80" + phone[3:]
+		}
+		out = append(out, pharmacyHint{Phone: strings.TrimSpace(phone)})
+	}
+	return out
+}
+
+// asks postgres “does such pharmacy exist?”
+func (s *Server) pharmacyExists(ctx context.Context, h pharmacyHint) (bool, error) {
+	// 1. приоритет – по номеру → по телефону → по названию
+	if h.Number != "" {
+		ok, err := s.db.CheckPharmacyByNumber(ctx, h.Number) // SELECT 1 … LIMIT 1
+		return ok, err
+	}
+	if h.Phone != "" {
+		ok, err := s.db.CheckPharmacyByPhone(ctx, h.Phone) // SELECT 1 … LIMIT 1
+		return ok, err
+	}
+	if h.Name != "" {
+		ok, err := s.db.CheckPharmacyByName(ctx, h.Name) // SELECT 1 … LIMIT 1
+		return ok, err
+	}
+	return true, nil // ничего проверять – значит «ничего не нарушает»
+}
+
+// high-level helper
+func (s *Server) validateAssistantAnswer(ctx context.Context, txt string) bool {
+	hints := extractPharmacyHints(txt)
+	if len(hints) == 0 { // в ответе вообще нет данных об аптеке
+		return true
+	}
+
+	for _, h := range hints {
+		ok, err := s.pharmacyExists(ctx, h)
+		if err != nil || !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // ---------------------------------------
@@ -1298,6 +1370,14 @@ func (s *Server) Chat(w http.ResponseWriter, r *http.Request) {
 	}
 	re := regexp.MustCompile(`[^\p{L}\p{N}\s.,!?":\-]`)
 	assistantResponseText = re.ReplaceAllString(assistantResponseText, "")
+
+	if ok := s.validateAssistantAnswer(ctx, assistantResponseText); !ok {
+		log.Print("[Chat] validation failed – pharmacy not found in DB")
+
+		assistantResponseText = "Извините, я не смог подтвердить информацию об аптеке. " +
+			"Повторите, пожалуйста, свой вопрос."
+		resolved = true
+	}
 
 	// --------------- 10. HISTORY ------------------------
 	if resolved {

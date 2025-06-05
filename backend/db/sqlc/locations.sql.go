@@ -9,6 +9,45 @@ import (
 	"context"
 )
 
+const checkPharmacyByName = `-- name: CheckPharmacyByName :one
+SELECT EXISTS (
+  SELECT 1 FROM locations WHERE pharmacy_name ILIKE $1
+)
+`
+
+func (q *Queries) CheckPharmacyByName(ctx context.Context, pharmacyName string) (bool, error) {
+	row := q.db.QueryRow(ctx, checkPharmacyByName, pharmacyName)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const checkPharmacyByNumber = `-- name: CheckPharmacyByNumber :one
+SELECT EXISTS (
+  SELECT 1 FROM locations WHERE pharmacy_number = $1
+)
+`
+
+func (q *Queries) CheckPharmacyByNumber(ctx context.Context, pharmacyNumber string) (bool, error) {
+	row := q.db.QueryRow(ctx, checkPharmacyByNumber, pharmacyNumber)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const checkPharmacyByPhone = `-- name: CheckPharmacyByPhone :one
+SELECT EXISTS (
+  SELECT 1 FROM locations WHERE phone = $1
+)
+`
+
+func (q *Queries) CheckPharmacyByPhone(ctx context.Context, phone string) (bool, error) {
+	row := q.db.QueryRow(ctx, checkPharmacyByPhone, phone)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const getNearestPharmacy = `-- name: GetNearestPharmacy :many
 SELECT id, text, ST_AsText(location) AS location_wkt
 		FROM locations

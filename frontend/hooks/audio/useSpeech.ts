@@ -1,34 +1,41 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import * as Speech from "expo-speech";
 import { Platform } from "react-native";
 
+type Status = "playing" | "paused";
+
 export function useSpeech() {
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [status, setStatus] = useState<Status>("paused");
+  const lastTextRef = useRef<string>("");
 
-  const speak = useCallback((text: string) => {
-    if (!text) return;
+  const replay = useCallback((text?: string) => {
+    const toSpeak = text || lastTextRef.current;
+    if (!toSpeak) return;
 
-    setIsSpeaking(true);
-    Speech.speak(text, {
+    lastTextRef.current = toSpeak;
+    setStatus("playing");
+
+    Speech.speak(toSpeak, {
       voice:
         Platform.OS === "android"
           ? "ru-ru-x-ruf-local"
           : "com.apple.voice.compact.ru-RU.Milena",
       language: "ru-RU",
-      onDone: () => setIsSpeaking(false),
-      onStopped: () => setIsSpeaking(false),
-      onError: () => setIsSpeaking(false),
+      onDone: () => setStatus("paused"),
+      onStopped: () => setStatus("paused"),
+      onError: () => setStatus("paused"),
     });
   }, []);
 
-  const stop = useCallback(() => {
+  const pause = useCallback(() => {
     Speech.stop();
-    setIsSpeaking(false);
+    setStatus("paused");
   }, []);
 
   return {
-    isSpeaking,
-    speak,
-    stop,
+    status,
+    isSpeaking: status === "playing",
+    replay,
+    pause,
   };
 }

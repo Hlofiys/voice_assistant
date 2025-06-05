@@ -10,8 +10,6 @@ import { TimeDisplay } from "./TimeDisplay";
 import { useSendHandler } from "@/hooks/audio/useSendHandler";
 import { useChat } from "@/context/providers/chat/ChatProvider";
 import { useLocationPermission } from "@/hooks/geolocation/useLocationPermission";
-import Button from '../ui/buttons/Button';
-import { SecureStorageKeys } from '@/constants/SecureStorage';
 
 interface IAudioPlayerControlsProps {
   onReadyToSendHandler?: (ready: boolean) => void;
@@ -69,7 +67,10 @@ export const AudioPlayerControls: FC<IAudioPlayerControlsProps> = (props) => {
 
       try {
         const userLocation = await getLocation();
-        console.log(`Координаты: ${userLocation?.latitude} ${userLocation?.latitude}`);
+        console.log(
+          `Координаты: ${userLocation?.latitude} ${userLocation?.latitude}`
+        );
+        console.log(info.size);
         await handleSend(userLocation ?? undefined, ({ data }) => {
           setAssistantResponse(data.assistant_response ?? "");
           setTranscription(data.transcription ?? "");
@@ -104,7 +105,6 @@ export const AudioPlayerControls: FC<IAudioPlayerControlsProps> = (props) => {
   return (
     <>
       <TimeDisplay time={time} visible={expanded} />
-      <Button onPress={()=>SecureStorage.setItemAsync(SecureStorageKeys.ACCESS_TOKEN, '123')}>234</Button>
       <View style={styles.container}>
         <AnimatePresence>
           {expanded && (

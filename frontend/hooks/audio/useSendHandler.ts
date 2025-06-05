@@ -6,6 +6,7 @@ import { AxiosResponse } from "axios";
 import { Chat200Response } from "@/interfaces/chat/Chat.interface";
 import { useSession } from "../gen/session/useSession";
 import { Coordinates } from "../geolocation/useLocationPermission";
+import { Platform } from "react-native";
 
 export const useSendHandler = (file: string) => {
   const { showAlert } = useAlert();
@@ -33,11 +34,12 @@ export const useSendHandler = (file: string) => {
 
     const props: IChatProps = {
       fileUri: info.uri,
-      fileName: "recording.m4a",
-      mimeType: "audio/mp4",
+      fileName: Platform.OS === "ios" ? "recording.m4a" : "recording.mp4",
+      mimeType: Platform.OS === "ios" ? "audio/x-m4a" : "audio/mp4",
       session_id: sessionId ?? undefined,
       location,
     };
+
     console.log("file: ", props);
     await send_message(props, { onSuccess });
   };

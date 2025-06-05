@@ -15,15 +15,21 @@ import { IconSymbol } from "../ui/IconSymbol";
 import { useSpeech } from "@/hooks/audio/useSpeech";
 import PromptSuggestions from "../PromptSuggestions";
 import { FadeInView } from "../FadeInView";
+import Button from "../ui/buttons/Button";
+import { setSession } from "@/reduxToolkit/Slices";
+import { useDispatch } from "react-redux";
 
 export default function MessageDisplay() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isReadyToSend, setIsReadyToSend] = useState(false);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isReadyToSend, setIsReadyToSend] = useState<boolean>(false);
+  const [visibleWordCount, setVisibleWordCount] = useState<number>(0);
 
-  const { speak, isSpeaking } = useSpeech();
+  const dispatch = useDispatch();
 
-  const { messages } = useChat();
+  const { status, replay, pause } = useSpeech();
+  const { messages, setAssistantResponse, setTranscription } = useChat();
+
   const scrollRef = useRef<ScrollView>(null);
 
   const words = useMemo(() => {
@@ -33,11 +39,9 @@ export default function MessageDisplay() {
 
   useEffect(() => {
     if (messages.assistant_response) {
-      speak(messages.assistant_response);
+      replay(messages.assistant_response);
     }
-  }, [messages.assistant_response, speak]);
-
-  const [visibleWordCount, setVisibleWordCount] = useState(0);
+  }, [messages.assistant_response, replay]);
 
   // Сброс видимых слов при смене ответа ассистента
   useEffect(() => {
@@ -88,6 +92,15 @@ export default function MessageDisplay() {
     () => showPlaceholder && !isReadyToSend,
     [showPlaceholder, isReadyToSend]
   );
+
+  const newDialogHandler = useCallback(() => {
+    dispatch(setSession(null));
+    setIsRecording(false);
+    setIsReadyToSend(false);
+    setAssistantResponse(""), setTranscription("");
+    pause();
+    // handleRecordingStatusChange(true); //
+  }, [dispatch, setSession, pause]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -143,38 +156,50 @@ export default function MessageDisplay() {
               </View>
             )}
 
-            <View style={styles.bubble}>
-              <ScrollView
-                ref={scrollRef}
-                style={styles.scroll}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
+            <View style={styles.responceContainer}>
+              <View style={styles.bubble}>
+                <ScrollView
+                  ref={scrollRef}
+                  style={styles.scroll}
+                  contentContainerStyle={styles.scrollContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text style={[styles.word, { width: "100%" }]}>Ответ:</Text>
+                  {words.slice(0, visibleWordCount).map((word, index) => (
+                    <MotiView
+                      key={`${word}-${index}`}
+                      from={{ opacity: 0, translateY: 10 }}
+                      animate={{ opacity: 1, translateY: 0 }}
+                      transition={{
+                        type: "timing",
+                        duration: 300,
+                      }}
+                    >
+                      <Text style={styles.word}>{word} </Text>
+                    </MotiView>
+                  ))}
+                </ScrollView>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (status === "playing") pause();
+                    else replay(messages.assistant_response);
+                  }}
+                  style={styles.playBtn}
+                >
+                  <IconSymbol
+                    name={status === "playing" ? "pause.circle" : "play"}
+                    color="#0a7ea4"
+                    size={32}
+                  />
+                </TouchableOpacity>
+              </View>
+              <Button
+                onPress={newDialogHandler}
+                type="text"
+                textStyle={{ color: "#0a7ea4" }}
               >
-                <Text style={[styles.word, { width: "100%" }]}>Ответ:</Text>
-                {words.slice(0, visibleWordCount).map((word, index) => (
-                  <MotiView
-                    key={`${word}-${index}`}
-                    from={{ opacity: 0, translateY: 10 }}
-                    animate={{ opacity: 1, translateY: 0 }}
-                    transition={{
-                      type: "timing",
-                      duration: 300,
-                    }}
-                  >
-                    <Text style={styles.word}>{word} </Text>
-                  </MotiView>
-                ))}
-              </ScrollView>
-              <TouchableOpacity
-                style={styles.playBtn}
-                disabled={isSpeaking}
-                onPress={() => speak(messages.assistant_response)}
-              >
-                <IconSymbol
-                  name="play"
-                  color={isSpeaking ? "gray" : "#0a7ea4"}
-                />
-              </TouchableOpacity>
+                Начать новый диалог
+              </Button>
             </View>
           </>
         )}
@@ -212,7 +237,11 @@ const styles = StyleSheet.create({
     color: "#aaa",
     fontStyle: "italic",
   },
-
+  responceContainer: {
+    width: "100%",
+    display: "flex",
+    gap: 20,
+  },
   bubble: {
     minWidth: "100%",
     position: "relative",

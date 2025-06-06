@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   },
   regularText: {
     fontSize: 15,
-    color: "#444",
+    color: "#AAA",
     textAlign: "center",
   },
 });

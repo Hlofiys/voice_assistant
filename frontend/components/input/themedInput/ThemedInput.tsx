@@ -65,9 +65,11 @@ const ThemedInput: FC<TThemedInputProps> = (props) => {
           </TouchableOpacity>
         )}
         <TextInput
-          key={isSecurity ? "secure" : "visible"}
+          // key={isSecurity ? "secure" : "visible"}
           style={styles.input}
           placeholderTextColor={"#BABABA"}
+          // color="black"
+          selectionColor={'black'}
           scrollEnabled={false}
           secureTextEntry={isSecurity}
           onBlur={inputProps.onBlur}

@@ -17,9 +17,12 @@ import (
 )
 
 type Metadata struct {
-	City        string `json:"city"`
-	Street      string `json:"street"`
-	HouseNumber string `json:"house_number"`
+	City           string `json:"city"`
+	Street         string `json:"street"`
+	HouseNumber    string `json:"house_number"`
+	PharmacyName   string `json:"pharmacy_name"`
+	PharmacyNumber string `json:"pharmacy_number"`
+	PhoneNumber    string `json:"phone_number"`
 }
 
 type Record struct {
@@ -97,8 +100,8 @@ func main() {
 		}
 
 		_, err = conn.Exec(ctx,
-			`INSERT INTO locations (text, location) VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326))`,
-			rec.Text, lon, lat,
+			`INSERT INTO locations (text, pharmacy_number, phone, pharmacy_name, location) VALUES ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326))`,
+			rec.Text, rec.Metadata.PharmacyNumber, rec.Metadata.PhoneNumber, rec.Metadata.PharmacyName, lon, lat,
 		)
 		if err != nil {
 			log.Printf("db insert error: %v", err)

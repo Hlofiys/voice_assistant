@@ -9,9 +9,12 @@ import (
 )
 
 type Location struct {
-	ID       int32       `json:"id"`
-	Text     string      `json:"text"`
-	Location interface{} `json:"location"`
+	ID             int32       `json:"id"`
+	Text           string      `json:"text"`
+	PharmacyNumber string      `json:"pharmacy_number"`
+	Phone          string      `json:"phone"`
+	PharmacyName   string      `json:"pharmacy_name"`
+	Location       interface{} `json:"location"`
 }
 
 type User struct {

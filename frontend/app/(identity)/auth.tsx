@@ -7,7 +7,7 @@ import IdentityLayout from "@/components/layouts/identity/IdentityLayout";
 import { ThemedText } from "@/components/ThemedText";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { View } from "react-native";
 import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { hasAllValues } from "@/utils/functions/Functions";
@@ -147,7 +147,7 @@ const auth = () => {
               isShowForgotPassword
               placeholder="********"
               isPassword
-              textContentType="oneTimeCode"
+              textContentType={Platform.OS === 'android' ? "password" : "oneTimeCode"}
               autoComplete="off"
               error="Введите корректный пароль"
             />

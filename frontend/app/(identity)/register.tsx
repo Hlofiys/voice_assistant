@@ -1,4 +1,4 @@
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, Platform } from "react-native";
 import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { useRouter } from "expo-router";
 import * as SecureStorage from "expo-secure-store";
@@ -18,7 +18,7 @@ import { hasAllValues } from "@/utils/functions/Functions";
 
 import { usePasswordRules } from "@/hooks/gen/password/usePasswordRules";
 import { SecureStorageKeys } from "@/constants/SecureStorage";
-import { RegisterRequest } from '@/interfaces/auth/Auth.interface';
+import { RegisterRequest } from "@/interfaces/auth/Auth.interface";
 
 interface IRegisterForm extends RegisterRequest {
   confirmPassword: string;
@@ -133,7 +133,9 @@ const Register = () => {
                 field.onBlur();
                 setIsVisible(false);
               }}
-              textContentType="oneTimeCode"
+              textContentType={
+                Platform.OS === "android" ? "password" : "oneTimeCode"
+              }
               autoComplete="off"
               autoCorrect={false}
               error={errors.password?.message}
@@ -155,7 +157,9 @@ const Register = () => {
               isPassword
               touched={!!touchedFields?.confirmPassword}
               onChangeText={field.onChange}
-              textContentType="oneTimeCode"
+              textContentType={
+                Platform.OS === "android" ? "password" : "oneTimeCode"
+              }
               autoComplete="off"
               autoCorrect={false}
               error={errors.confirmPassword?.message}

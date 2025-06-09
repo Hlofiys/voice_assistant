@@ -26,7 +26,7 @@ export const useErrorHook = (refetchKey?: string[]) => {
               await callback(); // Повтор запроса
             } 
           } catch (e) {
-            console.error("❌ Ошибка при обновлении токена", e);
+            // console.error("❌ Ошибка при обновлении токена", e);
           }
         }
       }

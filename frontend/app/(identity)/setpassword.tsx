@@ -22,6 +22,7 @@ import {
   PasswordResetWithCodeRequest,
 } from "@/interfaces/auth/Auth.interface";
 import { useDisableGestureEnabled } from "@/hooks/gen/navigation/useDisableGestureEnabled";
+import { Platform } from "react-native";
 
 interface ISetNewPasswordForm
   extends Omit<PasswordResetWithCodeRequest, "code"> {
@@ -195,7 +196,9 @@ const setpassword = () => {
                   field.onBlur();
                   setIsVisible(false);
                 }}
-                textContentType="oneTimeCode"
+                textContentType={
+                  Platform.OS === "android" ? "password" : "oneTimeCode"
+                }
                 autoComplete="off"
                 autoCorrect={false}
                 error={errors.new_password?.message}
@@ -219,7 +222,9 @@ const setpassword = () => {
                 isPassword
                 touched={!!touchedFields?.confirmPassword}
                 onChangeText={field.onChange}
-                textContentType="oneTimeCode"
+                textContentType={
+                  Platform.OS === "android" ? "password" : "oneTimeCode"
+                }
                 autoComplete="off"
                 autoCorrect={false}
                 error={errors.confirmPassword?.message}

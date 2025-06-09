@@ -12,26 +12,18 @@ import { useDispatch, useSelector } from "react-redux";
 import { IInitialState } from "@/reduxToolkit/Interfaces";
 import { useLogout } from "@/hooks/api/auth/useLogout";
 import * as SecureStorage from "expo-secure-store";
-import { setToken } from "@/reduxToolkit/Slices";
 import { useAlert } from "@/context/providers/portal.modal/AlertProvider";
 import { SecureStorageKeys } from "@/constants/SecureStorage";
 
 export default function HomeScreen() {
   const router = useRouter();
   const token = useSelector((state: IInitialState) => state.token);
-  const dispatch = useDispatch();
   const { showAlert } = useAlert();
   const { mutateAsync: logout, isPending: isPendingLogout } = useLogout();
 
   const handleLogout = useCallback(() => {
-    logout(undefined, {
-      onSuccess: async () => {
-        await SecureStorage.deleteItemAsync(SecureStorageKeys.ACCESS_TOKEN);
-        await SecureStorage.deleteItemAsync(SecureStorageKeys.REFRESH_TOKEN);
-        dispatch(setToken(null));
-      },
-    });
-  }, [logout, dispatch]);
+    logout();
+  }, [logout]);
 
   const fetchConfirmDataAndAlert = useCallback(async () => {
     try {

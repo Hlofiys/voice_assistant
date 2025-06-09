@@ -4,6 +4,7 @@ import {
   TextInput,
   TextInputProps,
   TouchableOpacity,
+  Platform,
 } from "react-native";
 import { FC, useMemo, useState } from "react";
 import { ThemedText } from "../../ThemedText";
@@ -69,7 +70,6 @@ const ThemedInput: FC<TThemedInputProps> = (props) => {
           style={styles.input}
           placeholderTextColor={"#BABABA"}
           // color="black"
-          selectionColor={'black'}
           scrollEnabled={false}
           secureTextEntry={isSecurity}
           onBlur={inputProps.onBlur}
@@ -131,6 +131,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F5F5",
     color: "black",
     textAlignVertical: "center",
+    fontFamily: (Platform.OS === "android" && "System") || undefined,
     paddingVertical: 12,
     paddingLeft: 12,
     paddingRight: 40,

@@ -3,6 +3,7 @@ import { Animated, Text, View, StyleSheet } from "react-native";
 import { ThemedText } from "./ThemedText";
 
 const prompts = [
+  'Адреса ближайших аптек',
   'Адрес аптеки "Адель" на улице Лобанка в Минске',
   'Какой номер телефона у аптеки №3 "Экомаркет" на улице Одинцова?',
   'Аптека №7 "Адвантфарма" на проспекте Независимости',
